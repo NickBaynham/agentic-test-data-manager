@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# pdm / venv
+.venv/
+__pypackages__/
+.pdm-python
+.pdm-build/
+
+# Testing / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node (Playwright)
+automation/playwright/node_modules/
+automation/playwright/playwright-report/
+automation/playwright/test-results/
+
+# Generated fixtures
+automation/fixtures/*.json
+automation/fixtures/*.py
+!automation/fixtures/.gitkeep
+
+# Generated data
+data/parquet/**/*.parquet
+data/catalogs/**/*.parquet
+!data/**/.gitkeep

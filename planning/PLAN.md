@@ -49,12 +49,50 @@ Code is **not** scaffolded ahead of need. A module appears in the repo only when
   infra/{postgres,minio}
   tests/architecture/
   ```
-- Add `Makefile` with stub targets: `setup`, `up`, `down`, `lint`, `test`, `build`, `demo`, `reset-baseline`, `baseline-snapshot`, `smoke`.
-- Add `pyproject.toml` ruff config (line-length 100, target py312) and `mypy.ini` (`strict = True`).
+- Add `Makefile` with stub targets: `setup`, `up`, `down`, `lint`, `test`, `build`, `demo`, `reset-baseline`, `baseline-snapshot`, `smoke`. The `lint` target must invoke mypy **once per source root** — see "Known pitfall" below.
+- Add `pyproject.toml` ruff config (line-length 100, target py312).
+- Add `mypy.ini` with the following non-negotiable settings to avoid the duplicate-`app/` trap (see "Known pitfall"):
+  ```ini
+  [mypy]
+  python_version = 3.12
+  strict = True
+  explicit_package_bases = True
+  namespace_packages = True
+  ```
+  Do **not** set a single `files = ...` directive that lists both `apps/test-data-agent/app` and `apps/target-healthcare-api/app` together — mypy will reject it.
 - Add `.env.example` with `ATDM_API_TOKEN`, `ATDM_API_URL`, `MINIO_*`, `POSTGRES_*`, `ATDM_FIXTURE_DIR`, `ATDM_PLANNER=rule`.
 - Add `.github/workflows/ci.yml`: lint, test, architecture jobs.
 - Add `CHANGELOG.md`, `FEATURES.md`, `TODO.md` (per CLAUDE.md).
 - Add a top-level `README.md` placeholder with a "Status: in development" banner and links to `requirements/`.
+
+**Known pitfall — two `app/` packages collide under mypy.**
+
+The documented structure has two Python packages literally named `app` — one under `apps/test-data-agent/app/` and one under `apps/target-healthcare-api/app/`. Both also carry `__init__.py`. Mypy treats them as duplicate top-level modules and aborts with:
+
+```
+error: Duplicate module named "app" (also at "<other_path>/app/__init__.py")
+```
+
+This is the same problem mypy describes at <https://mypy.readthedocs.io/en/stable/running_mypy.html#mapping-file-paths-to-modules>. It is **not** solvable by adjusting `MYPYPATH` alone, because both packages still resolve to the same top-level module name `app`.
+
+The accepted resolution — bake this in during Phase 0, don't discover it during lint:
+
+1. In `mypy.ini`, set `explicit_package_bases = True` and `namespace_packages = True`.
+2. Do **not** declare a `files = ...` list that includes both `app/` directories in one mypy invocation.
+3. In the `Makefile` `lint` target, invoke mypy in **three separate calls**, one per source root, so each invocation only sees one `app/`:
+   ```make
+   lint:
+   	$(PDM) run ruff check .
+   	$(PDM) run ruff format --check .
+   	$(PDM) run mypy --config-file mypy.ini apps/test-data-agent
+   	$(PDM) run mypy --config-file mypy.ini apps/target-healthcare-api
+   	$(PDM) run mypy --config-file mypy.ini tests
+   ```
+4. Mirror the same three-pass invocation in the CI `lint` job — calling `make lint` is sufficient.
+
+The same pattern protects the project from a future third `app/` (e.g., if Phase 3 adds an e-commerce SUT under `apps/target-ecommerce-api/app/`): add one more `mypy ...` line to the `lint` target. Do **not** be tempted to rename the inner packages to avoid the trap — the `app/` convention is referenced consistently across [BRD](../requirements/BRD.md), [engineering-handoff](../requirements/engineering-handoff.md), and [concept.md](../requirements/concept.md), and renaming would cascade through several documents.
+
+If a future contributor proposes consolidating mypy into one call: this is the reason that proposal will fail. Point them at this section.
 
 **Exit criteria.**
 
@@ -79,21 +117,37 @@ git clean -fdx && make setup && make lint && make test
 
 **Inputs.** Phase 0 complete.
 
+**Host port mapping (canonical).** This project uses non-default host ports to avoid collisions with other local stacks (one developer machine commonly runs Postgres on 5432 and MinIO on 9000/9001 for unrelated projects). Container-internal ports remain conventional; only the host side is remapped. Treat this table as **stable** — changing it later cascades through `.env.example`, READMEs, demo scripts, and asciinema cast.
+
+| Service | Container port | **Host port** | Reason for shift |
+|---|---|---|---|
+| Postgres | 5432 | **55432** | Avoid `5432` collisions. |
+| MinIO API | 9000 | **19000** | Avoid `9000` collisions. |
+| MinIO Console | 9001 | **19001** | Avoid `9001` collisions. |
+| Target SUT (FastAPI) | 8000 | **18000** | Symmetry with MinIO shift (1xxxx). |
+| ATDM agent (FastAPI) | 8001 | **18001** | Symmetry with Target SUT. |
+
+Inside the compose network, services address each other by service name + container port (e.g., `postgres:5432`, `minio:9000`, `target-healthcare-api:8000`). The host port mapping only affects connections from the developer's laptop (CLI, pytest from host, browser).
+
 **Work items.**
 
 - Add `infra/docker-compose.yml` with services:
-  - `postgres:16` with healthcheck, named volume.
-  - `minio/minio:latest` with healthcheck, named volume, two buckets autocreated via init container (`atdm-catalog`, `atdm-audit`, `atdm-fixtures`).
-  - `target-healthcare-api` — FastAPI stub serving `GET /health`.
-  - `test-data-agent` — FastAPI stub serving `GET /health` and `GET /metrics`.
-- Pin all images by tag (not `latest` for the apps; pin MinIO and Postgres by digest in a follow-up).
-- No host network mode. Only required ports published.
+  - `postgres:16` with healthcheck, named volume `atdm_postgres_data`, host port mapping `55432:5432`.
+  - `minio/minio:RELEASE.2025-04-22T22-12-26Z` (pinned by tag) with healthcheck, named volume `atdm_minio_data`, host port mappings `19000:9000` (API) and `19001:9001` (console).
+  - `minio-buckets` — one-shot `minio/mc` init container that creates `atdm-catalog`, `atdm-audit`, `atdm-fixtures` and exits 0.
+  - `target-healthcare-api` — `python:3.12-slim` with bind-mounted source from `apps/target-healthcare-api/`, running `uvicorn`, exposing host port `18000:8000`. Serves `GET /health`.
+  - `test-data-agent` — `python:3.12-slim` with bind-mounted source from `apps/test-data-agent/`, running `uvicorn`, exposing host port `18001:8001`. Serves `GET /health` and `GET /metrics`.
+- Per NFR-017, each long-running service carries `deploy.resources.limits.memory: 512m` (postgres, minio, target-healthcare-api, test-data-agent). The one-shot `minio-buckets` container is exempt.
+- Pin images by tag (not `latest`) for Postgres and MinIO. Pin by digest in a Phase 10 follow-up.
+- No host network mode. Only the five ports above are published.
 - `Makefile` `up` and `down` invoke `docker compose -f infra/docker-compose.yml`.
+- Update `.env.example` host-side URLs to use the remapped ports (`localhost:18000`, `localhost:18001`, `localhost:55432`, `localhost:19000`).
+- Note in README "Quickstart" that the stack uses non-default host ports and reference the table above.
 
 **Exit criteria.**
 
-- `make up` reports all four services `healthy` within 60 seconds (p95 over 5 runs).
-- `curl http://localhost:8000/health` and `curl http://localhost:8001/health` return 200.
+- `make up` reports all four long-running services `healthy` within 60 seconds (p95 over 5 runs). The one-shot `minio-buckets` container reports `Exited (0)`.
+- `curl http://localhost:18000/health` and `curl http://localhost:18001/health` return 200.
 - `make down` cleanly removes containers (volumes preserved).
 - Smoke test `tests/integration/test_stack_up.py::test_all_services_healthy_within_60s` passes.
 
@@ -101,8 +155,8 @@ git clean -fdx && make setup && make lint && make test
 
 ```
 make down && time make up
-curl -fsS http://localhost:8000/health
-curl -fsS http://localhost:8001/health
+curl -fsS http://localhost:18000/health
+curl -fsS http://localhost:18001/health
 pdm run pytest tests/integration/test_stack_up.py -k healthy
 ```
 
@@ -181,7 +235,7 @@ This is the **first demoable end-to-end slice**. Everything after this is broade
 ```
 make up
 # Request
-curl -fsS -X POST http://localhost:8001/test-data/requests \
+curl -fsS -X POST http://localhost:18001/test-data/requests \
      -H "Authorization: Bearer dev-token" \
      -H "Content-Type: application/json" \
      -d '{"domain":"healthcare","scenario":"active_member_clean","constraints":{},
@@ -191,20 +245,20 @@ curl -fsS -X POST http://localhost:8001/test-data/requests \
 RUN_ID=$(jq -r .test_run_id /tmp/atdm-resp.json)
 TOKEN=$(jq -r .cleanup.cleanup_token /tmp/atdm-resp.json)
 # Audit
-curl -fsS http://localhost:8001/audit/runs/$RUN_ID | jq .
+curl -fsS http://localhost:18001/audit/runs/$RUN_ID | jq .
 # Reset
-curl -fsS -X POST http://localhost:8001/test-data/runs/$RUN_ID/reset \
+curl -fsS -X POST http://localhost:18001/test-data/runs/$RUN_ID/reset \
      -H "Authorization: Bearer dev-token" \
      -H "Content-Type: application/json" \
      -d "{\"cleanup_token\":\"$TOKEN\"}"
 # Idempotent
-curl -fsS -X POST http://localhost:8001/test-data/runs/$RUN_ID/reset \
+curl -fsS -X POST http://localhost:18001/test-data/runs/$RUN_ID/reset \
      -H "Authorization: Bearer dev-token" \
      -H "Content-Type: application/json" \
      -d "{\"cleanup_token\":\"$TOKEN\"}"
 # Wrong token
 curl -fsS -o /dev/null -w "%{http_code}\n" -X POST \
-     http://localhost:8001/test-data/runs/$RUN_ID/reset \
+     http://localhost:18001/test-data/runs/$RUN_ID/reset \
      -H "Authorization: Bearer dev-token" \
      -H "Content-Type: application/json" \
      -d '{"cleanup_token":"wrong"}'   # expect 403
@@ -396,7 +450,7 @@ This is the **single most important phase for portfolio impact**, per BRD §14 R
 **Verification.**
 
 ```
-open http://localhost:8001/ui/audit/<a-known-run_id>
+open http://localhost:18001/ui/audit/<a-known-run_id>
 pdm run pytest tests/architecture/ -v
 ```
 
@@ -420,7 +474,7 @@ pdm run pytest tests/architecture/ -v
   5. `pdm run pytest automation/pytest-api/test_example_claim_denial.py` against the fresh fixture.
   6. `atdm reset <run_id>`.
   7. `atdm audit <run_id> --output json | jq .`.
-  8. Print "Demo complete. Open http://localhost:8001/ui/audit/<run_id> in a browser." and exit 0.
+  8. Print "Demo complete. Open http://localhost:18001/ui/audit/<run_id> in a browser." and exit 0.
 - Reference reviewer flow scripted in `docs/demo-script.md`.
 - `README.md` (≤ 400 lines):
   - Opens with the "what this proves" bullets from BRD §17.

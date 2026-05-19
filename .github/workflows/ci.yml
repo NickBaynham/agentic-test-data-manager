@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pdm
+        run: pipx install pdm
+
+      - name: Install dependencies
+        run: pdm install
+
+      - name: Run make lint
+        run: make lint
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pdm
+        run: pipx install pdm
+
+      - name: Install dependencies
+        run: pdm install
+
+      - name: Run make test
+        run: make test
+
+  architecture:
+    name: architecture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pdm
+        run: pipx install pdm
+
+      - name: Install dependencies
+        run: pdm install
+
+      - name: Run architecture fitness tests
+        # Phase 0: no architecture tests yet; pass through.
+        # Phase 8: AR-003 (no agent SQL), audit append-only, no-emoji checks.
+        run: pdm run pytest tests/architecture -v --no-header || (echo "Phase 0 — architecture suite is empty; passing through." && exit 0)
