@@ -94,6 +94,30 @@ The same pattern protects the project from a future third `app/` (e.g., if Phase
 
 If a future contributor proposes consolidating mypy into one call: this is the reason that proposal will fail. Point them at this section.
 
+**The pitfall extends to pytest (discovered in Phase 1).** The same duplicate-module problem hits pytest as soon as both apps have a `tests/` directory that imports `from app.main import app`. If `pyproject.toml` declares both `apps/test-data-agent/tests` and `apps/target-healthcare-api/tests` in `testpaths`, a single `pdm run pytest` invocation tries to import both `app` packages and one wins — tests then pass against the wrong code, or fail with `ImportError`.
+
+Resolution — bake this into Phase 1, don't discover it during test:
+
+1. In `pyproject.toml`, `[tool.pytest.ini_options].testpaths` lists **only** `tests` (the top-level root tests). Per-app tests are explicitly NOT discovered by default.
+2. The `Makefile` `test` target invokes pytest three times — once for the root `tests/`, once per app — each time with `PYTHONPATH` pointing at exactly one app's source root:
+   ```make
+   test: test-unit
+
+   test-unit:
+   	$(PDM) run pytest tests -m "not integration and not e2e"
+   	PYTHONPATH=apps/target-healthcare-api $(PDM) run pytest apps/target-healthcare-api/tests
+   	PYTHONPATH=apps/test-data-agent $(PDM) run pytest apps/test-data-agent/tests
+   ```
+3. Integration / e2e tests that exercise the running stack live under the top-level `tests/integration/` and are tagged `@pytest.mark.integration` / `@pytest.mark.e2e`. They are NOT part of `make test` (which stays Docker-free). They run via `make test-integration`.
+4. Ruff `isort` must declare `app` and `atdm` as known-first-party so it sorts the `from app.main import app` import after third-party (`fastapi`):
+   ```toml
+   [tool.ruff.lint.isort]
+   known-first-party = ["app", "atdm"]
+   ```
+   Without this, ruff fails the import order check.
+
+The pattern generalizes: any tooling that imports / discovers Python modules and processes both apps in one call will hit the trap. Always invoke per source root with isolated PYTHONPATH/MYPYPATH.
+
 **Exit criteria.**
 
 - `make setup` works on a fresh clone (only Docker + pdm prerequisites).
@@ -112,6 +136,8 @@ git clean -fdx && make setup && make lint && make test
 ---
 
 ## Phase 1 — Docker Compose: Postgres, MinIO, two service stubs
+
+> **STATUS: COMPLETE — 2026-05-20.** All exit criteria met. 5-run cold-start benchmark: p95 = 18s (NFR-001 budget 60s). Unit + integration + e2e tests green. See [CHANGELOG.md "Added — 2026-05-20"](../CHANGELOG.md) for the full deliverable list.
 
 **Goal.** `make up` brings up Postgres, MinIO, a Target-SUT stub, and an ATDM-agent stub. All four are healthy within 60 seconds.
 

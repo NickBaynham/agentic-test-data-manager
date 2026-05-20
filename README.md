@@ -1,7 +1,7 @@
 # Agentic Test Data Manager (ATDM)
 
-> **Status:** In development — Phase 0 (repo scaffold).
-> ![CI](https://github.com/nickbaynham/agentic-test-data-manager/actions/workflows/ci.yml/badge.svg)
+> **Status:** In development — Phase 1 (local stack landed).
+> ![CI](https://github.com/NickBaynham/agentic-test-data-manager/actions/workflows/ci.yml/badge.svg)
 
 A local-first Quality Intelligence component for test data provisioning. Automation engineers and AI testing agents request scenario-grounded synthetic test data by intent and receive a validated dataset, a Playwright / pytest fixture, and a cleanup contract that guarantees the test environment can be restored.
 
@@ -25,22 +25,34 @@ The full case is built up phase-by-phase in [planning/PLAN.md](planning/PLAN.md)
 | [CHANGELOG.md](CHANGELOG.md) | Per-change history. |
 | [FEATURES.md](FEATURES.md) | What ships in MVP. |
 | [TODO.md](TODO.md) | Phase 2+ items not yet built. |
+| [docs/development.md](docs/development.md) | Engineer's day-to-day guide. |
 
-## Quickstart (current state)
-
-Phase 0 deliverables only — scaffold lints, types-checks, and runs a trivial test.
+## Quickstart
 
 ```bash
-make setup    # pdm install
-make lint     # ruff + mypy --strict
-make test     # pytest
+# One-time setup
+make setup                  # pdm install
+cp .env.example .env.local  # optional — defaults are fine for local dev
+
+# Bring up the local stack (Postgres, MinIO, Target SUT, ATDM agent)
+make up
+
+# Hit the health endpoints
+curl -fsS http://localhost:18000/health    # Target SUT
+curl -fsS http://localhost:18001/health    # ATDM agent
+curl -fsS http://localhost:18001/metrics   # Prometheus text
+
+# When you're done
+make down
 ```
 
-Phase 1 (Docker stack, `make up`) is not yet implemented.
+Open `http://localhost:18000/docs` or `http://localhost:18001/docs` in a browser for the auto-generated FastAPI Swagger UI. The MinIO console is at `http://localhost:19001` (credentials in `.env.example`).
 
-### Host ports (Phase 1+)
+What's implemented today: Phase 0 (repo scaffold + CI) and Phase 1 (Docker Compose stack with health endpoints). What's coming: scenario request endpoint (Phase 3), generators/validators/seeders (Phase 4), reset strategies (Phase 5). See [planning/PLAN.md](planning/PLAN.md) for the full phase plan.
 
-To avoid collisions with other local stacks (Postgres on 5432, MinIO on 9000/9001 are commonly held by unrelated projects), this stack maps to non-default host ports. See [planning/PLAN.md Phase 1](planning/PLAN.md#phase-1--docker-compose-postgres-minio-two-service-stubs) for the full table.
+### Host ports
+
+The stack uses **non-default host ports** to avoid colliding with other local stacks. Full table and reasoning in [planning/PLAN.md Phase 1](planning/PLAN.md#phase-1--docker-compose-postgres-minio-two-service-stubs).
 
 | Service | Host port |
 |---|---|

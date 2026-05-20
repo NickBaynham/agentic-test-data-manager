@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 1 — Docker Compose: Postgres, MinIO, two service stubs.** See [planning/PLAN.md](planning/PLAN.md#phase-1--docker-compose-postgres-minio-two-service-stubs).
+**Phase 2 — Target SUT minimum: schema and repositories.** See [planning/PLAN.md](planning/PLAN.md#phase-2--target-sut-minimum-schema-and-repositories).
 
 ## Open MVP work (Phases 1–10)
 

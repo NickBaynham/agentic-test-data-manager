@@ -74,3 +74,37 @@ jobs:
         # Phase 0: no architecture tests yet; pass through.
         # Phase 8: AR-003 (no agent SQL), audit append-only, no-emoji checks.
         run: pdm run pytest tests/architecture -v --no-header || (echo "Phase 0 — architecture suite is empty; passing through." && exit 0)
+
+  stack:
+    name: stack (integration + e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pdm
+        run: pipx install pdm
+
+      - name: Install dependencies
+        run: pdm install
+
+      - name: Bring up local stack
+        run: make up
+
+      - name: Show stack status
+        run: make ps
+
+      - name: Run integration + e2e tests
+        run: make test-integration
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color
+
+      - name: Tear down stack
+        if: always()
+        run: make down

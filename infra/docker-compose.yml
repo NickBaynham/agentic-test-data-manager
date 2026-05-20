@@ -1,0 +1,157 @@
+# Agentic Test Data Manager — local stack
+#
+# Five services:
+#   postgres            Target SUT database (Phase 2+ writes here)
+#   minio               S3-compatible object store for catalog/audit/fixtures
+#   minio-buckets       One-shot init: creates the three required buckets and exits 0
+#   target-healthcare-api  FastAPI SUT stub serving GET /health (Phase 1)
+#   test-data-agent     FastAPI ATDM stub serving GET /health + /metrics (Phase 1)
+#
+# Host port mapping (canonical — see planning/PLAN.md Phase 1):
+#   Postgres        host 55432 -> container 5432
+#   MinIO API       host 19000 -> container 9000
+#   MinIO Console   host 19001 -> container 9001
+#   Target SUT      host 18000 -> container 8000
+#   ATDM agent      host 18001 -> container 8001
+#
+# Memory limits (NFR-017): 512m per long-running service.
+# The minio-buckets init container is exempt — exits quickly.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: atdm_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-atdm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atdm-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-target_healthcare}
+    ports:
+      - "55432:5432"
+    volumes:
+      - atdm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atdm} -d ${POSTGRES_DB:-target_healthcare}"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: atdm_minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-atdm}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-atdm-dev-only}
+    command: server /data --console-address ":9001"
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - atdm_minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || curl -fsS http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # One-shot bucket bootstrap. Exits 0 after creating the three required buckets.
+  # Idempotent — `mc mb --ignore-existing` is safe to re-run.
+  minio-buckets:
+    image: minio/mc:RELEASE.2025-04-08T15-39-49Z
+    container_name: atdm_minio_buckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+      mc mb --ignore-existing local/atdm-catalog &&
+      mc mb --ignore-existing local/atdm-audit &&
+      mc mb --ignore-existing local/atdm-fixtures &&
+      echo 'buckets ready'
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-atdm}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-atdm-dev-only}
+    restart: "no"
+
+  target-healthcare-api:
+    image: python:3.12-slim
+    container_name: atdm_target_healthcare_api
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ../apps/target-healthcare-api:/app
+      - atdm_pip_cache:/root/.cache/pip
+    ports:
+      - "18000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://localhost:8000/health\").status == 200 else 1)' || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  test-data-agent:
+    image: python:3.12-slim
+    container_name: atdm_test_data_agent
+    working_dir: /app
+    environment:
+      ATDM_PLANNER: ${ATDM_PLANNER:-rule}
+      TARGET_SUT_URL: http://target-healthcare-api:8000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-atdm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atdm-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-target_healthcare}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-atdm}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-atdm-dev-only}
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8001"
+    volumes:
+      - ../apps/test-data-agent:/app
+      - atdm_pip_cache:/root/.cache/pip
+    ports:
+      - "18001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://localhost:8001/health\").status == 200 else 1)' || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-buckets:
+        condition: service_completed_successfully
+      target-healthcare-api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+volumes:
+  atdm_postgres_data:
+  atdm_minio_data:
+  atdm_pip_cache:
