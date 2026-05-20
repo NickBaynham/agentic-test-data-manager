@@ -4,13 +4,18 @@ Every write to the `member` table flows through one of these functions.
 Parameterized queries only; no string-formatted SQL. This is enforced
 architecturally — AR-003 fitness test in Phase 8 will assert that the agent
 module never imports asyncpg, sqlalchemy, or any raw-SQL surface.
+
+All write functions accept an optional `conn` parameter so the bundle seed
+endpoint can drive multiple inserts inside one Postgres transaction.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 import asyncpg
 
-from app.db.session import connection
+from app.db.session import DbConn, connection
 from app.models.member import Address, Member
 
 _INSERT_MEMBER = """
@@ -36,32 +41,45 @@ _SELECT_BY_ID = """
 """
 
 
-async def insert_member(member: Member) -> None:
+def _insert_args(member: Member) -> tuple[Any, ...]:
+    return (
+        member.member_id,
+        member.status,
+        member.first_name,
+        member.last_name,
+        member.date_of_birth,
+        member.address.line1,
+        member.address.city,
+        member.address.state,
+        member.address.zip,
+        member.plan_id,
+        member.test_run_id,
+    )
+
+
+async def insert_member(
+    member: Member,
+    *,
+    conn: DbConn | None = None,
+) -> None:
     """Insert a single Member. Raises asyncpg.IntegrityConstraintViolationError
     if the FK to plan, the FAKE_ CHECK, or the ZZ CHECK fails.
     """
-    async with connection() as conn:
-        await conn.execute(
-            _INSERT_MEMBER,
-            member.member_id,
-            member.status,
-            member.first_name,
-            member.last_name,
-            member.date_of_birth,
-            member.address.line1,
-            member.address.city,
-            member.address.state,
-            member.address.zip,
-            member.plan_id,
-            member.test_run_id,
-        )
+    args = _insert_args(member)
+    if conn is not None:
+        await conn.execute(_INSERT_MEMBER, *args)
+        return
+    async with connection() as c:
+        await c.execute(_INSERT_MEMBER, *args)
 
 
-async def delete_by_run_id(run_id: str) -> int:
+async def delete_by_run_id(run_id: str, *, conn: DbConn | None = None) -> int:
     """Delete every Member with the given test_run_id. Returns deleted count."""
-    async with connection() as conn:
+    if conn is not None:
         result = await conn.execute(_DELETE_BY_RUN, run_id)
-    # asyncpg returns a tag like "DELETE 3"; parse the count out.
+    else:
+        async with connection() as c:
+            result = await c.execute(_DELETE_BY_RUN, run_id)
     parts = result.split()
     return int(parts[1]) if len(parts) == 2 and parts[0] == "DELETE" else 0
 

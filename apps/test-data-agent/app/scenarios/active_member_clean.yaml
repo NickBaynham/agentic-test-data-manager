@@ -1,18 +1,27 @@
 # Scenario: active_member_clean
 #
-# The simplest possible scenario — one Plan, one active Member with valid
-# address and FAKE_ markers. Used to prove the end-to-end vertical slice in
-# Phase 3. Real "interesting" scenarios (claim_denial, expired_eligibility,
-# etc.) land in Phase 4.
+# Headline happy-path scenario. Active member with a clean paid claim.
+# Validators ensure relational consistency. No denial drivers.
 scenario_id: active_member_clean
-description: Active member with valid coverage, no claims.
+description: Active member with valid coverage and a paid claim.
 tags:
   - happy-path
-  - member-only
+default_constraints:
+  member_status: active
+  provider_network: in_network
+  eligibility_status: active
+  eligibility_window: current
+  claim_status: paid
 generators:
   - generate_plan
+  - generate_provider
   - generate_member
-validators: []
+  - generate_eligibility
+  - generate_claim
+validators:
+  - relational.eligibility_status_matches_member
+  - relational.claim_references_existing_member
+  - temporal.eligibility_window_contains_claim
 linked_requirement_ids:
   - FR-001
   - FR-005

@@ -1,7 +1,8 @@
-"""POST /test-data/requests — the headline endpoint.
+"""POST /test-data/requests — headline endpoint.
 
-Orchestrates the Phase 3 vertical slice: planner (rule-based) → seeder →
-catalog → audit → response. Returns the contract shape required by BRD FR-005.
+Orchestrates the Phase 4 vertical slice:
+  request_received → plan_resolved → validators_passed | plan_rejected →
+  seed_started → seed_completed | seed_failed → catalog_recorded.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from app.audit import writer as audit_writer
 from app.catalog import store as catalog_store
 from app.scenarios.registry import get_scenario
 from app.seeders import healthcare as seeder
-from app.seeders.healthcare import SeedError
+from app.seeders.healthcare import SeedError, ValidatorRejected
 
 router = APIRouter()
 
@@ -48,15 +49,12 @@ def _planner_mode() -> str:
     return os.environ.get("ATDM_PLANNER", "rule")
 
 
-def _invoker_from(request: Request) -> str:
-    # MVP: every authenticated invocation is recorded as agent. Multi-user
-    # identity is Phase 4+ (BRD §16 decision #3).
+def _invoker_from(_request: Request) -> str:
     return "agent:atdm-dev"
 
 
 @router.post("/test-data/requests")
 async def create_request(scenario_request: ScenarioRequest, request: Request) -> dict[str, Any]:
-    # ATDM_PLANNER=llm short-circuits to 501 per BRD §16 decision #2.
     if _planner_mode() == "llm":
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -86,6 +84,9 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
     invoker = _invoker_from(request)
     minio_client = catalog_store.make_minio_client()
 
+    # Effective constraints = scenario defaults overridden by request.
+    effective_constraints = {**scenario.default_constraints, **scenario_request.constraints}
+
     audit_writer.append_event(
         minio_client,
         test_run_id=test_run_id,
@@ -95,12 +96,13 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
             "request_id": request_id,
             "scenario": scenario_request.scenario,
             "constraints": scenario_request.constraints,
+            "effective_constraints": effective_constraints,
             "delivery": scenario_request.delivery.model_dump(),
             "planner_mode": _planner_mode(),
         },
     )
 
-    plan = resolve_plan(scenario, test_run_id, scenario_request.constraints)
+    plan = resolve_plan(scenario, test_run_id, effective_constraints)
     audit_writer.append_event(
         minio_client,
         test_run_id=test_run_id,
@@ -109,6 +111,7 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
         outputs={
             "scenario_id": plan.scenario_id,
             "steps": [{"generator": s.generator} for s in plan.steps],
+            "validators": scenario.validators,
         },
     )
 
@@ -125,7 +128,50 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
             base_url=seeder.target_sut_base_url(),
             timeout=10.0,
         ) as client:
-            seeded = await seeder.execute_plan(plan, client=client)
+            bundle, validator_results = await seeder.execute_plan(
+                plan, scenario.validators, client=client
+            )
+    except ValidatorRejected as e:
+        audit_writer.append_event(
+            minio_client,
+            test_run_id=test_run_id,
+            invoker=invoker,
+            action="plan_rejected",
+            outputs={
+                "failed_validators": [
+                    {
+                        "validator": r.validator,
+                        "message": r.message,
+                        "details": r.details,
+                    }
+                    for r in e.results
+                ]
+            },
+            status="rejected",
+        )
+        catalog_store.write_run(
+            minio_client,
+            test_run_id=test_run_id,
+            request_id=request_id,
+            scenario_id=scenario.scenario_id,
+            cleanup_token_plain=cleanup_token,
+            invoker=invoker,
+            status="rejected",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "VALIDATOR_REJECTED",
+                    "message": "one or more validators rejected the generated plan",
+                    "details": {
+                        "failed_validators": [r.validator for r in e.results],
+                        "messages": [r.message for r in e.results],
+                    },
+                    "test_run_id": test_run_id,
+                }
+            },
+        ) from e
     except SeedError as e:
         audit_writer.append_event(
             minio_client,
@@ -139,7 +185,6 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
             },
             status="rolled_back",
         )
-        # Update catalog with rolled_back status.
         catalog_store.write_run(
             minio_client,
             test_run_id=test_run_id,
@@ -155,11 +200,23 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
                 "error": {
                     "code": "SEED_FAILED",
                     "message": str(e),
-                    "details": {"step": e.step, "downstream_status": e.downstream_status},
+                    "details": {
+                        "step": e.step,
+                        "downstream_status": e.downstream_status,
+                    },
                     "test_run_id": test_run_id,
                 }
             },
         ) from e
+
+    # All validators that ran are recorded (passing or not), for traceability.
+    audit_writer.append_event(
+        minio_client,
+        test_run_id=test_run_id,
+        invoker=invoker,
+        action="validators_passed",
+        outputs={"validators": [r.validator for r in validator_results]},
+    )
 
     audit_writer.append_event(
         minio_client,
@@ -168,7 +225,9 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
         action="seed_completed",
         outputs={
             "records_created": [
-                {"kind": kind, "primary_key": rec.get(f"{kind}_id")} for kind, rec in seeded.items()
+                {"kind": kind, "primary_key": _pk(bundle.get(kind), kind)}
+                for kind in ("plan", "provider", "member", "eligibility", "claim")
+                if bundle.get(kind)
             ]
         },
     )
@@ -195,11 +254,13 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
         "test_run_id": test_run_id,
         "status": "ready",
         "data": {
-            "member_id": seeded.get("member", {}).get("member_id"),
-            "plan_id": seeded.get("plan", {}).get("plan_id"),
+            "plan_id": _pk(bundle.get("plan"), "plan"),
+            "provider_id": _pk(bundle.get("provider"), "provider"),
+            "member_id": _pk(bundle.get("member"), "member"),
+            "eligibility_id": _pk(bundle.get("eligibility"), "eligibility"),
+            "claim_id": _pk(bundle.get("claim"), "claim"),
         },
         "fixtures": {
-            # Phase 6 will fill these in.
             "playwright": None,
             "pytest": None,
         },
@@ -208,3 +269,12 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
             "endpoint": f"/test-data/runs/{test_run_id}/reset",
         },
     }
+
+
+def _pk(record: dict[str, Any] | None, kind: str) -> str | None:
+    """Pull the primary key out of a record dict by the {kind}_id convention."""
+    if not record:
+        return None
+    key = f"{kind}_id"
+    value = record.get(key)
+    return None if value is None else str(value)

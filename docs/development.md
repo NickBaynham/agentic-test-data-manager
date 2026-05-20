@@ -239,13 +239,34 @@ curl -fsS -X POST "http://localhost:18001/test-data/runs/$RUN/reset" \
 
 1. Drop a YAML file in `apps/test-data-agent/app/scenarios/`. Required keys:
    `scenario_id`, `generators` (ordered list of generator function names),
-   `validators` (currently empty until Phase 4), `linked_requirement_ids`
-   (may be empty, but the field is mandatory — FR-044).
+   `validators` (list of dotted validator names), `linked_requirement_ids`
+   (FR-044; may be empty but the field is mandatory).
+   Optional: `default_constraints` (a dict merged BEFORE the caller's
+   constraints, so callers can override).
 2. If the scenario needs new generators, add them under
    `apps/test-data-agent/app/generators/` and register them in the seeder's
-   `_GENERATOR_TO_ROUTES` map.
-3. The scenario registry loads at agent startup — `make down && make up`
-   (or `docker compose restart test-data-agent`) for changes to take effect.
+   `_GENERATORS` map.
+3. The scenario registry loads at agent startup — `docker compose restart
+   test-data-agent` for changes to take effect.
+
+### Available scenarios (Phase 4)
+
+| scenario_id | What it builds |
+|---|---|
+| `active_member_clean` | Active member, in-network provider, paid claim within window. |
+| `claim_denial_active_member` | Active member, out-of-network provider, denied claim with invalid procedure code. Exercises all 4 validators. |
+| `expired_eligibility` | Member with eligibility window that ended last year; recent claim denied. |
+| `out_of_network_pending_claim` | Active member, out-of-network provider, claim pending review. |
+| `inactive_member_with_history` | Inactive member with historical paid claim (soft-delete semantics). |
+
+### Validators (Phase 4)
+
+| Name | Rule |
+|---|---|
+| `relational.eligibility_status_matches_member` | inactive member ⇒ eligibility can't be active. |
+| `relational.claim_references_existing_member` | claim.member_id must match bundle's member.member_id. |
+| `domain.denial_requires_invalid_code` | denied claim must reference an invalid code OR carry a denial_reason. |
+| `temporal.eligibility_window_contains_claim` | denied/pending claims must fall within eligibility window unless eligibility is expired. |
 
 ### Planner modes
 

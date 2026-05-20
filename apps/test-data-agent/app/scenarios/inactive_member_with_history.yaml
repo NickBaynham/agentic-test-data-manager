@@ -1,0 +1,32 @@
+# Scenario: inactive_member_with_history
+#
+# Member is inactive (e.g., terminated coverage) but has a historical paid
+# claim within the prior eligibility window. The eligibility row carries
+# status='inactive' — consistent with member.status (relational validator
+# permits inactive-on-inactive).
+scenario_id: inactive_member_with_history
+description: Inactive member with one historical paid claim.
+tags:
+  - soft-delete
+  - history
+default_constraints:
+  member_status: inactive
+  provider_network: in_network
+  eligibility_status: inactive
+  eligibility_window: current
+  claim_status: paid
+  procedure_code: "99213"
+  diagnosis_code: "Z00.00"
+generators:
+  - generate_plan
+  - generate_provider
+  - generate_member
+  - generate_eligibility
+  - generate_claim
+validators:
+  - relational.eligibility_status_matches_member
+  - relational.claim_references_existing_member
+  - temporal.eligibility_window_contains_claim
+linked_requirement_ids:
+  - FR-010
+  - FR-011

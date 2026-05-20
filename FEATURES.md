@@ -14,6 +14,14 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 4 — Broadened generators, validators, and scenarios (2026-05-20)
+
+- Five entities live on the Target SUT (Provider, Eligibility, Claim, ProcedureCode, DiagnosisCode) with Pydantic models, transaction-aware repos, and atomic bundle endpoints.
+- Five scenarios fulfill end-to-end: `active_member_clean`, `claim_denial_active_member`, `expired_eligibility`, `out_of_network_pending_claim`, `inactive_member_with_history`.
+- Four cross-entity validators reject contradictory bundles before any DB write (B2 acceptance).
+- Atomic single-transaction bundle insert + FK-safe atomic bundle delete (FR-014).
+- 91% combined line coverage on generators/, validators/, seeders/ (every module ≥80%, Phase 4 exit criterion).
+
 ### Phase 3 — First end-to-end vertical slice (2026-05-20)
 
 - `POST /test-data/requests` returns scenario-grounded synthetic test data, seeds the Target SUT, records the catalog and audit trail, and returns a `cleanup_token`.
@@ -50,7 +58,6 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 4.** All 7 entities, all 5 scenarios, validator-gated atomic seeding.
 - **Phase 5.** All five reset strategies (`reset_run`, `reset_all`, `baseline_snapshot`, `baseline_restore`, `idempotent_seed`).
 - **Phase 6.** Playwright JSON + pytest module fixture emitters.
 - **Phase 7.** `atdm` CLI and `atdm.pytest` library.

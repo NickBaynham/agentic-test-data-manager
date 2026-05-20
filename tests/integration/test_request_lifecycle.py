@@ -80,9 +80,21 @@ def _psql(sql: str) -> str:
 
 
 def _force_cleanup(run_id: str) -> None:
-    """Best-effort: scrub all rows for a run regardless of API state."""
-    _psql(f"DELETE FROM member WHERE test_run_id = '{run_id}';")
-    _psql(f"DELETE FROM plan   WHERE test_run_id = '{run_id}';")
+    """Best-effort: scrub all rows for a run regardless of API state.
+
+    Uses the Phase 4 atomic bundle DELETE so FK ordering is handled
+    automatically — Phase 4 scenarios produce all 5 mutable entities, so the
+    Phase 3 per-entity helper no longer works.
+    """
+    import contextlib
+
+    with contextlib.suppress(urllib.error.URLError):
+        urllib.request.urlopen(  # noqa: S310
+            urllib.request.Request(
+                f"http://localhost:18000/internal/scenarios?run_id={run_id}",
+                method="DELETE",
+            )
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -147,7 +159,10 @@ def test_reset_with_correct_token_cleans_up(compose_stack: None) -> None:
         )
         assert code == 200
         assert reset_body["status"] == "cleaned"
-        assert reset_body["deleted_counts"] == {"member": 1, "plan": 1}
+        # Phase 4: bundle DELETE returns deleted_counts for all 7 tables it
+        # touched (5 mutable + per-run codes which are 0 in this scenario).
+        assert reset_body["deleted_counts"]["member"] == 1
+        assert reset_body["deleted_counts"]["plan"] == 1
 
         assert int(_psql(f"SELECT COUNT(*) FROM member WHERE test_run_id='{run_id}';")) == 0
         assert int(_psql(f"SELECT COUNT(*) FROM plan   WHERE test_run_id='{run_id}';")) == 0
@@ -239,10 +254,12 @@ def test_audit_events_emitted_for_happy_path(compose_stack: None) -> None:
         assert code == 200
 
         actions = [e["action"] for e in trail["events"]]
+        # Phase 4 added `validators_passed` between seed_started and seed_completed.
         expected = [
             "request_received",
             "plan_resolved",
             "seed_started",
+            "validators_passed",
             "seed_completed",
             "catalog_recorded",
         ]

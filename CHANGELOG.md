@@ -4,6 +4,29 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-20 — Phase 4 broadened generators, validators, and scenarios
+
+Phase 4 widens the Phase 3 vertical slice from one scenario to five, fills in
+all seven entity types, and wires up four cross-entity validators that fail
+fast before any DB write.
+
+- **Five entities added to Target SUT** — Provider, Eligibility, Claim, ProcedureCode, DiagnosisCode. Pydantic models (mirrors of DB CHECKs), repositories (single SQL surface, parameterized queries only), all transaction-aware via the new `DbConn` type alias.
+- **Atomic bundle endpoints** — `POST /internal/scenarios/seed` accepts a `ScenarioBundle` and inserts everything in one Postgres transaction. `DELETE /internal/scenarios?run_id=...` deletes all 7 tables in FK-safe reverse order in one transaction. Saga compensation removed from the agent — server-side transactions handle atomicity.
+- **Five new ATDM generators** — `generate_provider`, `generate_eligibility`, `generate_claim`, `generate_procedure_code`, `generate_diagnosis_code`. All pure, seedable from `test_run_id`. Parent IDs derived deterministically via `{kind}-{run_id}` convention so generators are self-contained.
+- **Four validators** under `apps/test-data-agent/app/validators/` with a registry mapping dotted names to callables:
+  - `relational.eligibility_status_matches_member`
+  - `relational.claim_references_existing_member`
+  - `domain.denial_requires_invalid_code`
+  - `temporal.eligibility_window_contains_claim`
+- **Four new scenarios** (`claim_denial_active_member`, `expired_eligibility`, `out_of_network_pending_claim`, `inactive_member_with_history`) plus an updated `active_member_clean`. Scenario YAML schema gains `default_constraints` — caller's `constraints` merge on top.
+- **Refactored seeder** — generate → validate → POST bundle. `ValidatorRejected` raised on validator failure (no bundle posted). `SeedError` raised on server failure.
+- **New audit events** — `validators_passed`, `plan_rejected`. The latter carries the failed validator name and message in the audit trail.
+- **`POST /test-data/requests` returns 422 + `plan_rejected`** when any validator fails (BRD B2 acceptance). Catalog records the run with status `rejected`.
+- Tests:
+  - 8 new integration tests in `test_phase4_scenarios.py` covering all 5 scenarios + B2 validator rejection + full bundle clear.
+  - 13 new unit tests for generators, 17 for validators, 8 for seeder (47 unit tests total). **Coverage on generators/, validators/, seeders/ combined: 91%** (every module ≥80% — Phase 4 exit criterion met).
+- **Phase 3 test fixtures updated** — `_force_cleanup` in `test_request_lifecycle.py` now uses the bundle DELETE instead of per-entity DELETEs (Phase 4's scenarios produce children that FK-reference Member/Plan; the old helper would fail).
+
 ### Added — 2026-05-20 — Phase 3 first end-to-end vertical slice
 
 The headline `POST /test-data/requests` endpoint is live for the
@@ -103,3 +126,6 @@ lifecycle works end-to-end against the local stack.
 - 2026-05-20 — **"Member only" in PLAN.md Phase 3 actually requires Plan too.** The PLAN.md said Phase 3 builds the Member generator/seeder/route only, deferring the other six entities to Phase 4. But Member.plan_id is a FK to Plan in the Phase 2 schema, so any Member insert needs a Plan to exist first. Resolution: added a minimal Plan repo + internal route in Phase 3 (mirror of Member, 30 lines each). Backfilled into PLAN.md Phase 3 "Known prerequisite". For Phase 4, the lesson: when sequencing entity work, sequence by FK dependency order, not by alphabetical or arbitrary order.
 - 2026-05-20 — **`pyarrow` ships no type stubs.** mypy `--strict` rejects it. Resolution: add `[mypy-pyarrow.*] ignore_missing_imports = True` in `mypy.ini`. Note: this section is "unused" in mypy passes that don't touch pyarrow (target-healthcare-api, tests/) — mypy emits a harmless warning. Acceptable noise; no fix needed.
 - 2026-05-20 — **Restarting a docker compose service mid-integration-test corrupts subsequent tests.** I tried to test `ATDM_PLANNER=llm` mode by restarting the agent container with an env override during an integration test. The restart left the stack in a transitional state and the next-running test (`test_all_services_healthy`) caught the agent as `starting` and failed. Resolution: moved that test to a unit test using `TestClient` + `monkeypatch.setenv`. **General rule for integration tests: never restart compose services mid-suite.** If you need a different config, exercise it in a unit test or in a separate top-level integration job.
+- 2026-05-20 — **Per-entity `_force_cleanup` helpers break when a phase adds new entities.** Phase 3 tests' helper did `DELETE FROM member; DELETE FROM plan`. Phase 4 added Eligibility and Claim, both FK-referencing Member, so the old helper failed with a constraint violation. Resolution: switch every test's cleanup to the atomic bundle DELETE (`DELETE /internal/scenarios?run_id=...`) which handles FK order centrally. **General rule**: cleanup helpers should call the most atomic DELETE the API exposes, not enumerate tables — adding a new entity to a phase shouldn't require touching every prior phase's tests.
+- 2026-05-20 — **PoolConnectionProxy vs Connection — type alias is the clean fix.** Adding transaction-aware repositories (Phase 4) re-surfaced the asyncpg "Pool.acquire() yields PoolConnectionProxy, not Connection" issue from Phase 2. Six repos all needed the same union type. Resolution: a single `type DbConn = asyncpg.Connection[Any] | asyncpg.pool.PoolConnectionProxy[Any]` alias in `app/db/session.py`. Use the modern `type` keyword over `TypeAlias` — ruff prefers it.
+- 2026-05-20 — **A single `_pk(record)` helper that scans for `*_id` keys silently returns the wrong key.** When the Member record carries both `member_id` (PK) and `plan_id` (FK), iterating keys and returning the first match yields the FK. Subtle bug that smoke-tested fine but broke `data.member_id` in the response. Resolution: always pass the entity kind explicitly. **General rule**: helpers that scan over a fixed list of keys should never silently pick a "winner" — make the lookup explicit.

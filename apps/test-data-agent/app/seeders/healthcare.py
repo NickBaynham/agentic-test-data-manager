@@ -1,30 +1,38 @@
-"""Healthcare seeder.
+"""Healthcare seeder (Phase 4).
 
-Executes a resolved Plan against the Target SUT over HTTP. Order matters:
-parents before children (Plan → Member → Eligibility → Claim). On any failure,
-compensate by deleting in reverse order — every entity is `test_run_id`-tagged
-so cleanup is deterministic.
+New flow:
+  1. Generate all records by invoking the scenario's generators in order.
+  2. Run the scenario's validators against the generated bundle. If any
+     validator fails, raise ValidatorRejected — no DB writes occur.
+  3. POST the bundle to Target SUT's /internal/scenarios/seed in one atomic
+     transaction. FK / CHECK / unique violations roll back the whole bundle
+     server-side.
 
-Phase 3 only knows two generators: `generate_plan` and `generate_member`.
-Phase 4 adds the remaining five.
+Saga compensation was removed in Phase 4 — the server-side transaction makes
+the agent-side compensating-delete pattern from Phase 3 unnecessary.
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable
+from collections.abc import Callable
 from typing import Any
 
 import httpx
 
 from app.agents.planner import Plan
+from app.generators import claim as claim_gen
+from app.generators import codes as codes_gen
+from app.generators import eligibility as eligibility_gen
 from app.generators import member as member_gen
 from app.generators import plan as plan_gen
+from app.generators import provider as provider_gen
+from app.validators import ValidationResult
+from app.validators.registry import get_validator
 
 
 class SeedError(Exception):
-    """Raised when a seeder step fails. The agent maps this to HTTP 502/500
-    depending on the failure mode."""
+    """Bundle insert failed at the Target SUT (network or server error)."""
 
     def __init__(self, message: str, *, step: str, downstream_status: int | None = None) -> None:
         super().__init__(message)
@@ -32,111 +40,122 @@ class SeedError(Exception):
         self.downstream_status = downstream_status
 
 
-# Map a step's generator name to (which entity collection it lands in, the
-# Target SUT route to POST it to, and the route to DELETE-by-run on compensation).
-_GENERATOR_TO_ROUTES: dict[str, tuple[str, str]] = {
-    "generate_plan": ("/internal/plans", "/internal/plans"),
-    "generate_member": ("/internal/members", "/internal/members"),
+class ValidatorRejected(Exception):
+    """A scenario's validator(s) rejected the generated bundle."""
+
+    def __init__(self, results: list[ValidationResult]) -> None:
+        super().__init__("validators rejected the plan")
+        self.results = results
+
+
+GeneratorFn = Callable[[int, str, dict[str, Any] | None], dict[str, Any]]
+
+# Generator name -> (callable, bundle key). Codes have list bundle keys.
+_GENERATORS: dict[str, tuple[GeneratorFn, str]] = {
+    "generate_plan": (plan_gen.generate_plan, "plan"),
+    "generate_provider": (provider_gen.generate_provider, "provider"),
+    "generate_member": (member_gen.generate_member, "member"),
+    "generate_eligibility": (eligibility_gen.generate_eligibility, "eligibility"),
+    "generate_claim": (claim_gen.generate_claim, "claim"),
+    "generate_procedure_code": (codes_gen.generate_procedure_code, "_proc_code"),
+    "generate_diagnosis_code": (codes_gen.generate_diagnosis_code, "_diag_code"),
 }
-
-
-def _seed_for_step(step_index: int, run_id: str) -> int:
-    """Stable per-step seed derived from run_id + step_index."""
-    return (abs(hash(run_id)) + step_index) % (2**31)
-
-
-def _run_generator(name: str, seed: int, run_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    if name == "generate_plan":
-        return plan_gen.generate_plan(seed, run_id, args)
-    if name == "generate_member":
-        plan_id = args.get("_plan_id")
-        if not isinstance(plan_id, str):
-            raise SeedError(
-                "generate_member needs a _plan_id in args (seeder must inject it)",
-                step=name,
-            )
-        return member_gen.generate_member(seed, run_id, plan_id, args)
-    raise SeedError(f"unknown generator {name!r}", step=name)
 
 
 def target_sut_base_url() -> str:
     return os.environ.get("TARGET_SUT_URL", "http://target-healthcare-api:8000")
 
 
-async def execute_plan(plan: Plan, *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
-    """Execute a resolved Plan against the Target SUT.
+def _seed_for_step(idx: int, run_id: str) -> int:
+    return (abs(hash(run_id)) + idx) % (2**31)
 
-    Returns a dict of {entity_kind: record_dict} for the records that were
-    inserted. On failure, compensates by DELETE'ing every entity inserted so
-    far (in reverse order), then raises SeedError.
+
+def generate_bundle(
+    generator_names: list[str],
+    test_run_id: str,
+    constraints: dict[str, Any],
+) -> dict[str, Any]:
+    """Run each named generator in order; collect into a bundle dict."""
+    bundle: dict[str, Any] = {"procedure_codes": [], "diagnosis_codes": []}
+    for idx, name in enumerate(generator_names):
+        entry = _GENERATORS.get(name)
+        if entry is None:
+            raise SeedError(f"unknown generator {name!r}", step=name)
+        gen_fn, bundle_key = entry
+        record = gen_fn(_seed_for_step(idx, test_run_id), test_run_id, constraints)
+        if bundle_key == "_proc_code":
+            bundle["procedure_codes"].append(record)
+        elif bundle_key == "_diag_code":
+            bundle["diagnosis_codes"].append(record)
+        else:
+            bundle[bundle_key] = record
+    return bundle
+
+
+def run_validators(
+    validator_names: list[str],
+    bundle: dict[str, Any],
+) -> list[ValidationResult]:
+    results: list[ValidationResult] = []
+    for name in validator_names:
+        validator = get_validator(name)
+        if validator is None:
+            results.append(
+                ValidationResult(
+                    ok=False,
+                    validator=name,
+                    message=f"unknown validator {name!r}",
+                )
+            )
+            continue
+        results.append(validator(bundle))
+    return results
+
+
+async def execute_plan(
+    plan: Plan,
+    scenario_validators: list[str],
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> tuple[dict[str, Any], list[ValidationResult]]:
+    """Generate → validate → bundle insert.
+
+    Returns (bundle_actually_seeded, all_validator_results).
+    Raises ValidatorRejected on validation failure.
+    Raises SeedError on Target SUT failure.
     """
+    generator_names = [step.generator for step in plan.steps]
+    bundle = generate_bundle(generator_names, plan.test_run_id, plan.constraints)
+
+    results = run_validators(scenario_validators, bundle)
+    failed = [r for r in results if not r.ok]
+    if failed:
+        raise ValidatorRejected(failed)
+
     own_client = False
     if client is None:
         client = httpx.AsyncClient(base_url=target_sut_base_url(), timeout=10.0)
         own_client = True
-
-    inserted: list[str] = []  # delete routes, reverse order on compensation
-    results: dict[str, dict[str, Any]] = {}
-    plan_id_from_step: str | None = None
-
     try:
-        for idx, step in enumerate(plan.steps):
-            args = dict(step.args)
-            if step.generator == "generate_member" and plan_id_from_step is not None:
-                args["_plan_id"] = plan_id_from_step
+        try:
+            resp = await client.post("/internal/scenarios/seed", json=bundle)
+        except httpx.HTTPError as e:
+            raise SeedError(
+                f"network failure posting bundle: {e}",
+                step="scenarios/seed",
+            ) from e
 
-            record = _run_generator(
-                step.generator,
-                _seed_for_step(idx, plan.test_run_id),
-                plan.test_run_id,
-                args,
+        if resp.status_code not in (200, 201):
+            raise SeedError(
+                f"/internal/scenarios/seed returned {resp.status_code}: {resp.text}",
+                step="scenarios/seed",
+                downstream_status=resp.status_code,
             )
 
-            post_route, delete_route = _GENERATOR_TO_ROUTES[step.generator]
-            try:
-                resp = await client.post(post_route, json=record)
-            except httpx.HTTPError as e:
-                raise SeedError(
-                    f"network failure posting to {post_route}: {e}",
-                    step=step.generator,
-                ) from e
-
-            if resp.status_code not in (200, 201):
-                raise SeedError(
-                    f"{post_route} returned {resp.status_code}: {resp.text}",
-                    step=step.generator,
-                    downstream_status=resp.status_code,
-                )
-
-            inserted.append(delete_route)
-            if step.generator == "generate_plan":
-                plan_id_from_step = record["plan_id"]
-                results["plan"] = record
-            elif step.generator == "generate_member":
-                results["member"] = record
-
-        return results
-
-    except SeedError:
-        await _compensate(client, inserted, plan.test_run_id)
-        raise
+        return bundle, results
     finally:
         if own_client:
             await client.aclose()
-
-
-async def _compensate(
-    client: httpx.AsyncClient,
-    delete_routes: Iterable[str],
-    run_id: str,
-) -> None:
-    """Best-effort: DELETE each entity collection by run_id in REVERSE order."""
-    for route in reversed(list(delete_routes)):
-        try:
-            await client.delete(route, params={"run_id": run_id})
-        except httpx.HTTPError:
-            # Compensation is best-effort; original error surfaces.
-            continue
 
 
 async def reset_run(
@@ -144,30 +163,26 @@ async def reset_run(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, int]:
-    """Delete every entity collection by run_id in dependency-safe order:
-    Member (FK to Plan) first, then Plan. Returns deleted counts.
+    """Delete every entity for a run via the atomic bundle DELETE.
 
-    Phase 3 covers Plan + Member only. Phase 5 extends to all 5 mutable
-    entities and the full reset_run / reset_all strategy surface.
+    Phase 5 will extend this to support the full reset_run / reset_all
+    strategy surface.
     """
     own_client = False
     if client is None:
         client = httpx.AsyncClient(base_url=target_sut_base_url(), timeout=10.0)
         own_client = True
-
-    counts: dict[str, int] = {}
     try:
-        for route, kind in (("/internal/members", "member"), ("/internal/plans", "plan")):
-            resp = await client.delete(route, params={"run_id": run_id})
-            if resp.status_code != 200:
-                raise SeedError(
-                    f"{route} returned {resp.status_code}: {resp.text}",
-                    step=f"reset_{kind}",
-                    downstream_status=resp.status_code,
-                )
-            body = resp.json()
-            counts[kind] = int(body.get("deleted_count", 0))
-        return counts
+        resp = await client.delete("/internal/scenarios", params={"run_id": run_id})
+        if resp.status_code != 200:
+            raise SeedError(
+                f"/internal/scenarios DELETE returned {resp.status_code}: {resp.text}",
+                step="reset_scenario",
+                downstream_status=resp.status_code,
+            )
+        body = resp.json()
+        counts = body.get("deleted_counts", {})
+        return {k: int(v) for k, v in counts.items()}
     finally:
         if own_client:
             await client.aclose()

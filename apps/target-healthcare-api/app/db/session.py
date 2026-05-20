@@ -16,6 +16,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import asyncpg
+import asyncpg.pool
+
+# Either a raw Connection or a PoolConnectionProxy can be passed into a repo
+# method. Both expose execute/fetchrow/etc. Pool.acquire() yields the proxy
+# form; passing it to repo methods that accept Connection requires this alias
+# (mypy strict otherwise rejects the assignment).
+type DbConn = asyncpg.Connection[Any] | asyncpg.pool.PoolConnectionProxy[Any]
 
 _pool: asyncpg.Pool[Any] | None = None
 
@@ -60,7 +67,7 @@ def get_pool() -> asyncpg.Pool[Any]:
 
 
 @asynccontextmanager
-async def connection() -> AsyncIterator[asyncpg.pool.PoolConnectionProxy[Any]]:
+async def connection() -> AsyncIterator[DbConn]:
     """Yield a pooled connection. Use inside repository methods."""
     pool = get_pool()
     async with pool.acquire() as conn:

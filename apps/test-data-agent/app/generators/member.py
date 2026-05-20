@@ -2,6 +2,9 @@
 
 Same seed + test_run_id = same output. All names carry the FAKE_ prefix; the
 address state is always `ZZ` (NFR-010).
+
+`plan_id` is derived from `test_run_id` via the f"plan-{test_run_id}"
+convention shared across all generators — see app/generators/plan.py.
 """
 
 from __future__ import annotations
@@ -16,18 +19,12 @@ from app.generators.names import FAKE_CITY_NAMES, FAKE_FIRST_NAMES, FAKE_LAST_NA
 def generate_member(
     seed: int,
     test_run_id: str,
-    plan_id: str,
     constraints: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return a Member dict ready to POST to the Target SUT.
-
-    `plan_id` is required because Member.plan_id is a FK and the generator
-    cannot invent a Plan — the seeder must insert one first.
-    """
-    rng = random.Random(seed + 1)  # offset so member differs from plan
+    """Return a Member dict ready to include in a ScenarioBundle."""
+    rng = random.Random(seed + 1)
     constraints = constraints or {}
 
-    # Year-month-day deterministically derived from seed.
     birth_year = 1970 + (seed % 50)
     birth_month = 1 + (seed % 12)
     birth_day = 1 + (seed % 28)
@@ -44,6 +41,6 @@ def generate_member(
             "state": "ZZ",
             "zip": f"{seed % 100000:05d}",
         },
-        "plan_id": plan_id,
+        "plan_id": f"plan-{test_run_id}",
         "test_run_id": test_run_id,
     }

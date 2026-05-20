@@ -1,0 +1,35 @@
+# Scenario: claim_denial_active_member
+#
+# The headline DEMO scenario. Active member, out-of-network provider, denied
+# claim with an invalid procedure code. Exercises all four validators and the
+# full bundle insert flow.
+scenario_id: claim_denial_active_member
+description: Active member with one denied claim from an out-of-network provider.
+tags:
+  - headline
+  - denial
+default_constraints:
+  member_status: active
+  provider_network: out_of_network
+  eligibility_status: active
+  eligibility_window: current
+  claim_status: denied
+  procedure_code: "00000"  # baseline invalid
+  diagnosis_code: "Z00.00"
+  denial_reason: "invalid_procedure_code"
+generators:
+  - generate_plan
+  - generate_provider
+  - generate_member
+  - generate_eligibility
+  - generate_claim
+validators:
+  - relational.eligibility_status_matches_member
+  - relational.claim_references_existing_member
+  - domain.denial_requires_invalid_code
+  - temporal.eligibility_window_contains_claim
+linked_requirement_ids:
+  - FR-001
+  - FR-005
+  - FR-010
+  - FR-011

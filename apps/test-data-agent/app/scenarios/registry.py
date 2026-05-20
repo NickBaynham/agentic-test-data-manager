@@ -28,6 +28,8 @@ class ScenarioDefinition(BaseModel):
     generators: list[str] = Field(min_length=1)
     validators: list[str] = Field(default_factory=list)
     linked_requirement_ids: list[str] = Field(default_factory=list)
+    # Scenario-level constraint defaults. Caller's `constraints` override these.
+    default_constraints: dict[str, Any] = Field(default_factory=dict)
 
 
 _registry: dict[str, ScenarioDefinition] = {}

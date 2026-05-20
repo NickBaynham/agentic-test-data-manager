@@ -1,0 +1,35 @@
+# Scenario: expired_eligibility
+#
+# Member whose coverage ended last year; the denied claim was submitted today,
+# outside the eligibility window. The `temporal` validator permits this case
+# because the eligibility is explicitly status='expired' — that's the
+# scenario's intent.
+scenario_id: expired_eligibility
+description: Member with expired eligibility window; recent claim denied.
+tags:
+  - temporal
+  - denial
+default_constraints:
+  member_status: active
+  provider_network: in_network
+  eligibility_status: expired
+  eligibility_window: expired_last_year
+  claim_status: denied
+  procedure_code: "00000"
+  diagnosis_code: "Z00.00"
+  denial_reason: "expired_eligibility"
+generators:
+  - generate_plan
+  - generate_provider
+  - generate_member
+  - generate_eligibility
+  - generate_claim
+validators:
+  - relational.eligibility_status_matches_member
+  - relational.claim_references_existing_member
+  - domain.denial_requires_invalid_code
+  - temporal.eligibility_window_contains_claim
+linked_requirement_ids:
+  - FR-001
+  - FR-010
+  - FR-011

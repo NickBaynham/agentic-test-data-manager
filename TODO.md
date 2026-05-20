@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 4 — Broaden generators, validators, and scenarios.** See [planning/PLAN.md](planning/PLAN.md#phase-4--broaden-generators-validators-and-scenarios).
+**Phase 5 — Full reset surface.** See [planning/PLAN.md](planning/PLAN.md#phase-5--full-reset-surface).
 
 ## Open MVP work (Phases 1–10)
 

@@ -1,0 +1,31 @@
+# Scenario: out_of_network_pending_claim
+#
+# Active member, out-of-network provider, pending claim within the eligibility
+# window. No denial driver needed (claim status is pending, not denied).
+scenario_id: out_of_network_pending_claim
+description: Active member, out-of-network provider, claim pending review.
+tags:
+  - pending
+  - multi-attribute
+default_constraints:
+  member_status: active
+  provider_network: out_of_network
+  eligibility_status: active
+  eligibility_window: current
+  claim_status: pending
+  procedure_code: "70553"
+  diagnosis_code: "M54.5"
+generators:
+  - generate_plan
+  - generate_provider
+  - generate_member
+  - generate_eligibility
+  - generate_claim
+validators:
+  - relational.eligibility_status_matches_member
+  - relational.claim_references_existing_member
+  - temporal.eligibility_window_contains_claim
+linked_requirement_ids:
+  - FR-001
+  - FR-010
+  - FR-011

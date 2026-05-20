@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.db.session import connection
+from app.db.session import DbConn, connection
 from app.models.plan import Plan
 
 _INSERT = """
@@ -15,21 +15,27 @@ _DELETE_BY_RUN = "DELETE FROM plan WHERE test_run_id = $1"
 _COUNT_BY_RUN = "SELECT COUNT(*) FROM plan WHERE test_run_id = $1"
 
 
-async def insert_plan(plan: Plan) -> None:
-    async with connection() as conn:
-        await conn.execute(
-            _INSERT,
-            plan.plan_id,
-            plan.name,
-            plan.coverage_type,
-            plan.effective_date,
-            plan.test_run_id,
-        )
+async def insert_plan(plan: Plan, *, conn: DbConn | None = None) -> None:
+    args = (
+        plan.plan_id,
+        plan.name,
+        plan.coverage_type,
+        plan.effective_date,
+        plan.test_run_id,
+    )
+    if conn is not None:
+        await conn.execute(_INSERT, *args)
+        return
+    async with connection() as c:
+        await c.execute(_INSERT, *args)
 
 
-async def delete_by_run_id(run_id: str) -> int:
-    async with connection() as conn:
+async def delete_by_run_id(run_id: str, *, conn: DbConn | None = None) -> int:
+    if conn is not None:
         result = await conn.execute(_DELETE_BY_RUN, run_id)
+    else:
+        async with connection() as c:
+            result = await c.execute(_DELETE_BY_RUN, run_id)
     parts = result.split()
     return int(parts[1]) if len(parts) == 2 and parts[0] == "DELETE" else 0
 
