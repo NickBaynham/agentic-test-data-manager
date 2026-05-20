@@ -1,21 +1,45 @@
-"""ATDM Agent — Phase 1 stub.
+"""ATDM Agent.
 
-Serves /health and /metrics only. Real scenario request, validator, seeder,
-audit, and reset surfaces land in Phase 3 onward.
+Phase 1: /health, /metrics stubs.
+Phase 3: scenario request → seed → audit → reset vertical slice.
 """
 
+from __future__ import annotations
+
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
+from app.api import audit as audit_routes
+from app.api import requests as request_routes
+from app.api import reset as reset_routes
+from app.api.middleware import api_token_middleware
+from app.scenarios.registry import load_scenarios
+
 PLANNER_MODE = os.environ.get("ATDM_PLANNER", "rule")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    load_scenarios()
+    yield
+
 
 app = FastAPI(
     title="ATDM Agent",
     description="Agentic Test Data Manager — intent-to-data scenario provisioning.",
-    version="0.1.0",
+    version="0.3.0",
+    lifespan=lifespan,
 )
+
+app.middleware("http")(api_token_middleware)
+
+app.include_router(request_routes.router)
+app.include_router(reset_routes.router)
+app.include_router(audit_routes.router)
 
 
 @app.get("/health")

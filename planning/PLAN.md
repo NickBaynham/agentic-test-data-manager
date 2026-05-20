@@ -249,6 +249,10 @@ pdm run pytest apps/target-healthcare-api/tests/ -k member
 
 ## Phase 3 — First vertical slice: one scenario, one entity, one reset path
 
+> **STATUS: COMPLETE — 2026-05-20.** All BRD §13 acceptance blocks (FR-001/FR-005, FR-030/FR-035, E1, E2) pass against the live stack. Headline `POST /test-data/requests` end-to-end: planner → seeder → catalog → audit → response in ~1s. Reset round-trip with cleanup_token verification, idempotency, 403/404 paths all green. Scenario YAML registry, rule-based planner, deterministic seedable generators, MinIO+Parquet catalog/audit, Bearer-token middleware, `ATDM_PLANNER=llm` 501 stub — all shipped. 11 new integration tests + 6 new unit tests, all 36 tests in the suite passing.
+
+**Known prerequisite (discovered in Phase 3) — Member needs Plan.** The PLAN.md work items below say "Member only" for generators/seeders/routes. But Member.plan_id is a FK to Plan in the Phase 2 schema, so any Member insert requires a Plan first. Phase 3 added a minimal Plan repo+route on the Target SUT (mirror of Member, ~50 lines total) as an in-phase prerequisite — NOT scope creep, just FK reality. The general lesson for Phase 4+: **when sequencing entity work, sequence by FK dependency order**, not alphabetical or arbitrary. The seven entities should be added in order: ProcedureCode + DiagnosisCode (independent reference) → Plan (independent) → Provider (independent) → Member (FK to Plan) → Eligibility (FK to Member) → Claim (FK to Member, Provider, codes).
+
 **Goal.** `POST /test-data/requests` for the single scenario `active_member_clean` produces a Member in the Target SUT, returns a `test_run_id` and `cleanup_token`, and `POST /test-data/runs/{run_id}/reset` removes the Member. The audit log records the request happy-path events.
 
 This is the **first demoable end-to-end slice**. Everything after this is broadening.

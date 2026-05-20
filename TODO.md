@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 3 — First vertical slice: one scenario, one entity, one reset path.** See [planning/PLAN.md](planning/PLAN.md#phase-3--first-vertical-slice-one-scenario-one-entity-one-reset-path).
+**Phase 4 — Broaden generators, validators, and scenarios.** See [planning/PLAN.md](planning/PLAN.md#phase-4--broaden-generators-validators-and-scenarios).
 
 ## Open MVP work (Phases 1–10)
 

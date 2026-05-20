@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from app.db.session import close_pool, init_pool
 from app.routes import member as member_routes
+from app.routes import plan as plan_routes
 
 
 @asynccontextmanager
@@ -32,6 +33,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(plan_routes.router)
 app.include_router(member_routes.router)
 
 

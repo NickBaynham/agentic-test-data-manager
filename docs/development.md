@@ -208,6 +208,58 @@ Sample output on a reference Mac (M2, 16 GB):
 
 If p95 exceeds 60s on your hardware, investigate before scaling up the stack.
 
+## Intent-to-data request (Phase 3 — headline endpoint)
+
+The ATDM agent now serves the headline endpoint. End-to-end example against
+the local stack:
+
+```bash
+# Request a scenario. The Authorization header is required for all mutations.
+RESP=$(curl -fsS -X POST http://localhost:18001/test-data/requests \
+  -H 'authorization: Bearer dev-token-change-me' \
+  -H 'content-type: application/json' \
+  -d '{"domain":"healthcare","scenario":"active_member_clean","constraints":{},
+       "delivery":{"seed_target":true}}')
+echo "$RESP" | jq .
+
+RUN=$(echo "$RESP" | jq -r .test_run_id)
+TOKEN=$(echo "$RESP" | jq -r .cleanup.cleanup_token)
+
+# Inspect the audit trail.
+curl -fsS "http://localhost:18001/audit/runs/$RUN" | jq '.events[].action'
+
+# Reset.
+curl -fsS -X POST "http://localhost:18001/test-data/runs/$RUN/reset" \
+  -H 'authorization: Bearer dev-token-change-me' \
+  -H 'content-type: application/json' \
+  -d "{\"cleanup_token\":\"$TOKEN\"}" | jq .
+```
+
+### Adding a new scenario
+
+1. Drop a YAML file in `apps/test-data-agent/app/scenarios/`. Required keys:
+   `scenario_id`, `generators` (ordered list of generator function names),
+   `validators` (currently empty until Phase 4), `linked_requirement_ids`
+   (may be empty, but the field is mandatory — FR-044).
+2. If the scenario needs new generators, add them under
+   `apps/test-data-agent/app/generators/` and register them in the seeder's
+   `_GENERATOR_TO_ROUTES` map.
+3. The scenario registry loads at agent startup — `make down && make up`
+   (or `docker compose restart test-data-agent`) for changes to take effect.
+
+### Planner modes
+
+- `ATDM_PLANNER=rule` (default in MVP) — deterministic lookup by scenario_id.
+- `ATDM_PLANNER=llm` — Phase 4+; returns 501 `LLM_MODE_NOT_ENABLED` in MVP.
+
+### Catalog and audit storage
+
+The catalog (`s3://atdm-catalog/runs/{run_id}.parquet`) holds one row per
+ScenarioRequest with the sha256 hash of its cleanup token. The audit log
+(`s3://atdm-audit/runs/{run_id}.parquet`) holds the chronological event trail
+for that run. Both live in MinIO — browse them at
+`http://localhost:19001` (default creds in `.env.example`).
+
 ## Member entity (Phase 2 — internal use)
 
 The Target SUT exposes Member CRUD under `/internal/`. These routes are

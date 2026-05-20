@@ -1,0 +1,19 @@
+# Scenario: active_member_clean
+#
+# The simplest possible scenario — one Plan, one active Member with valid
+# address and FAKE_ markers. Used to prove the end-to-end vertical slice in
+# Phase 3. Real "interesting" scenarios (claim_denial, expired_eligibility,
+# etc.) land in Phase 4.
+scenario_id: active_member_clean
+description: Active member with valid coverage, no claims.
+tags:
+  - happy-path
+  - member-only
+generators:
+  - generate_plan
+  - generate_member
+validators: []
+linked_requirement_ids:
+  - FR-001
+  - FR-005
+  - FR-010

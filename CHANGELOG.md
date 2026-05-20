@@ -4,6 +4,28 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-20 — Phase 3 first end-to-end vertical slice
+
+The headline `POST /test-data/requests` endpoint is live for the
+`active_member_clean` scenario. Full request → plan → seed → audit → reset
+lifecycle works end-to-end against the local stack.
+
+- **Scenario YAML registry.** `apps/test-data-agent/app/scenarios/` loaded at agent startup via the lifespan. Each YAML carries `scenario_id`, ordered `generators`, optional `validators`, `linked_requirement_ids` (FR-044 — Coverage Intelligence linkage from MVP).
+- **Rule-based planner.** `apps/test-data-agent/app/agents/planner.py` — no LLM, fully deterministic. Translates `{scenario_id, constraints}` into an ordered `Plan(steps=[(generator, args), ...])`.
+- **Deterministic generators.** `apps/test-data-agent/app/generators/{plan,member}.py` — pure functions, seedable from `test_run_id`. Names drawn from a fixed `FAKE_` pool (NFR-010). Address state always `ZZ`.
+- **Seeder with saga compensation.** `apps/test-data-agent/app/seeders/healthcare.py` — `execute_plan` calls Target SUT internal routes in order. On any failure, deletes by `run_id` in reverse order. `reset_run` deletes Member then Plan (FK-safe order).
+- **Catalog and audit (MinIO + Parquet).** One Parquet object per run under `s3://atdm-catalog/runs/{run_id}.parquet` (catalog) and `s3://atdm-audit/runs/{run_id}.parquet` (audit). Cleanup tokens stored as sha256 only (DR-007). Append-only at API layer (NFR-011).
+- **API: `POST /test-data/requests`.** Orchestrates the full vertical slice. Emits 5 audit events in order: `request_received`, `plan_resolved`, `seed_started`, `seed_completed`, `catalog_recorded`. Returns the FR-005 contract shape with `request_id`, `test_run_id`, `data`, `cleanup`.
+- **API: `POST /test-data/runs/{run_id}/reset`.** Verifies cleanup_token against stored sha256, deletes via Target SUT, updates catalog status. Idempotent — second call returns `already_cleaned`. Wrong token returns 403. Unknown run returns 404.
+- **API: `GET /audit/runs/{run_id}`.** Returns full audit trail as JSON with `x-audit-source` header pointing at the source Parquet object.
+- **API token middleware.** Bearer token required on all mutating endpoints (POST/PUT/PATCH/DELETE). `/health` and `/metrics` always pass through.
+- **`ATDM_PLANNER=llm` 501 stub** (BRD §16 decision #2) — returns `LLM_MODE_NOT_ENABLED`. Tested via unit test, not integration (env override + container restart proved too fragile mid-suite).
+- **Target SUT: Plan entity.** Mirror of Member: Pydantic model, repository, internal `POST /internal/plans` and `DELETE /internal/plans?run_id=` routes. Phase 3 prerequisite — Member.plan_id is a FK, so a Plan must exist before a Member can be inserted.
+- **Deps added** (project + ATDM agent requirements.txt): `python-ulid`, `pyarrow`, `minio`, `pyyaml`, `types-PyYAML`.
+- **Tests** (all green):
+  - 11 new integration tests under `tests/integration/test_request_lifecycle.py` covering happy path, reset with correct token, idempotent reset, wrong-token 403, unknown-run 404, audit event ordering, audit JSON contract, `x-audit-source` header, auth required (401), unknown scenario (404), health bypass.
+  - 6 new unit tests under `apps/test-data-agent/tests/test_planner_modes.py` covering LLM mode 501, auth (no token / wrong token), health/metrics bypass, unknown scenario.
+
 ### Added — 2026-05-20 — Phase 2 Target SUT schema and Member entity
 
 - `apps/target-healthcare-api/migrations/0001_init.sql` lands all seven entities from BRD §9 (`plan`, `provider`, `member`, `eligibility`, `claim`, `procedure_code`, `diagnosis_code`).
@@ -78,3 +100,6 @@ All notable changes to this project are recorded here. Newest first.
 - 2026-05-20 — **Postgres `docker-entrypoint-initdb.d/` is a one-shot, not a migration tool.** When Phase 2 added a migration file and bind-mounted it into the existing (Phase 1) stack, `make up` brought everything healthy but zero tables existed — Postgres skips the entrypoint when the data directory is already initialized. Resolution: migrations are idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT ... ON CONFLICT DO NOTHING`); `make migrate` re-applies via `psql` against the live stack; `make down-clean && make up` is documented as the reset path. The three options are written into PLAN.md Phase 2 "Known pitfall" and `docs/development.md`.
 - 2026-05-20 — **`asyncpg` has no type stubs.** Mypy `--strict` flags every import. Resolution: add `asyncpg-stubs` as a dev dep. Also note: `pool.acquire()` yields `PoolConnectionProxy[Any]`, not `Connection[Any]` — annotate accordingly.
 - 2026-05-20 — **`pytest-asyncio` 0.26 forces `pytest < 9`.** Adding `pytest-asyncio` silently downgraded `pytest` from 9.0.3 to 8.4.2. Not a blocker for us, but worth knowing if you depend on pytest 9 features. Pin both explicitly if it matters.
+- 2026-05-20 — **"Member only" in PLAN.md Phase 3 actually requires Plan too.** The PLAN.md said Phase 3 builds the Member generator/seeder/route only, deferring the other six entities to Phase 4. But Member.plan_id is a FK to Plan in the Phase 2 schema, so any Member insert needs a Plan to exist first. Resolution: added a minimal Plan repo + internal route in Phase 3 (mirror of Member, 30 lines each). Backfilled into PLAN.md Phase 3 "Known prerequisite". For Phase 4, the lesson: when sequencing entity work, sequence by FK dependency order, not by alphabetical or arbitrary order.
+- 2026-05-20 — **`pyarrow` ships no type stubs.** mypy `--strict` rejects it. Resolution: add `[mypy-pyarrow.*] ignore_missing_imports = True` in `mypy.ini`. Note: this section is "unused" in mypy passes that don't touch pyarrow (target-healthcare-api, tests/) — mypy emits a harmless warning. Acceptable noise; no fix needed.
+- 2026-05-20 — **Restarting a docker compose service mid-integration-test corrupts subsequent tests.** I tried to test `ATDM_PLANNER=llm` mode by restarting the agent container with an env override during an integration test. The restart left the stack in a transitional state and the next-running test (`test_all_services_healthy`) caught the agent as `starting` and failed. Resolution: moved that test to a unit test using `TestClient` + `monkeypatch.setenv`. **General rule for integration tests: never restart compose services mid-suite.** If you need a different config, exercise it in a unit test or in a separate top-level integration job.

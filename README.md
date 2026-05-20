@@ -1,6 +1,6 @@
 # Agentic Test Data Manager (ATDM)
 
-> **Status:** In development — Phase 1 (local stack landed).
+> **Status:** In development — Phase 3 (first end-to-end vertical slice landed).
 > ![CI](https://github.com/NickBaynham/agentic-test-data-manager/actions/workflows/ci.yml/badge.svg)
 
 A local-first Quality Intelligence component for test data provisioning. Automation engineers and AI testing agents request scenario-grounded synthetic test data by intent and receive a validated dataset, a Playwright / pytest fixture, and a cleanup contract that guarantees the test environment can be restored.
@@ -48,7 +48,18 @@ make down
 
 Open `http://localhost:18000/docs` or `http://localhost:18001/docs` in a browser for the auto-generated FastAPI Swagger UI. The MinIO console is at `http://localhost:19001` (credentials in `.env.example`).
 
-What's implemented today: Phase 0 (repo scaffold + CI) and Phase 1 (Docker Compose stack with health endpoints). What's coming: scenario request endpoint (Phase 3), generators/validators/seeders (Phase 4), reset strategies (Phase 5). See [planning/PLAN.md](planning/PLAN.md) for the full phase plan.
+### Request a scenario (the headline endpoint)
+
+```bash
+curl -fsS -X POST http://localhost:18001/test-data/requests \
+  -H 'authorization: Bearer dev-token-change-me' \
+  -H 'content-type: application/json' \
+  -d '{"scenario":"active_member_clean"}'
+```
+
+You'll receive a response with `test_run_id`, the seeded `member_id` / `plan_id`, and a `cleanup_token`. Use that token to tear the run down via `POST /test-data/runs/{run_id}/reset`. See [docs/development.md](docs/development.md#intent-to-data-request-phase-3--headline-endpoint) for the end-to-end example.
+
+What's implemented today: Phase 0 (repo scaffold + CI), Phase 1 (Docker Compose stack), Phase 2 (target schema + Member entity), Phase 3 (intent-to-data: scenario request → seed → audit → reset for one scenario). What's coming: more scenarios + validators (Phase 4), reset strategies (Phase 5), fixtures (Phase 6), CLI (Phase 7), audit HTML page (Phase 8). See [planning/PLAN.md](planning/PLAN.md) for the full phase plan.
 
 ### Host ports
 

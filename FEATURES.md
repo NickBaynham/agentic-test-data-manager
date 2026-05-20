@@ -14,6 +14,18 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 3 — First end-to-end vertical slice (2026-05-20)
+
+- `POST /test-data/requests` returns scenario-grounded synthetic test data, seeds the Target SUT, records the catalog and audit trail, and returns a `cleanup_token`.
+- `POST /test-data/runs/{run_id}/reset` cleans up by `test_run_id` via Target SUT. Token-verified (sha256), idempotent, FK-safe deletion order.
+- `GET /audit/runs/{run_id}` returns the chronological audit trail with `x-audit-source` header.
+- Rule-based planner, scenario YAML registry, deterministic seedable generators (Member + Plan).
+- Saga compensation: any seeder failure rolls back inserted entities by `test_run_id` in reverse order.
+- Catalog and audit log persisted as Parquet objects in MinIO.
+- Bearer-token middleware on all mutating endpoints.
+- `ATDM_PLANNER=llm` 501 stub.
+- One scenario shipped: `active_member_clean`.
+
 ### Phase 2 — Target SUT schema and Member entity (2026-05-20)
 
 - Seven-entity Postgres schema landed via Postgres `docker-entrypoint-initdb.d/`. Idempotent — re-applies cleanly via `make migrate`.
@@ -38,7 +50,6 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 3.** First end-to-end slice: `active_member_clean` request → seed → audit → reset.
 - **Phase 4.** All 7 entities, all 5 scenarios, validator-gated atomic seeding.
 - **Phase 5.** All five reset strategies (`reset_run`, `reset_all`, `baseline_snapshot`, `baseline_restore`, `idempotent_seed`).
 - **Phase 6.** Playwright JSON + pytest module fixture emitters.
