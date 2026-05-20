@@ -7,7 +7,7 @@
 PDM ?= pdm
 COMPOSE ?= docker compose -f infra/docker-compose.yml
 
-.PHONY: help setup lint test test-unit test-integration build up down down-clean logs ps demo smoke baseline-snapshot reset-baseline clean
+.PHONY: help setup lint test test-unit test-integration build up down down-clean logs ps migrate demo smoke baseline-snapshot reset-baseline clean
 
 help:
 	@echo "Agentic Test Data Manager — Make targets"
@@ -23,6 +23,7 @@ help:
 	@echo "  down-clean         Stop, remove containers, AND DELETE VOLUMES (destructive)."
 	@echo "  logs               Tail logs from the stack."
 	@echo "  ps                 Show stack status."
+	@echo "  migrate            Apply SQL migrations to the running Postgres (idempotent)."
 	@echo "  demo               Run the end-to-end intent-to-data demo. Phase 9 deliverable."
 	@echo "  smoke              Quick round-trip smoke test exercising all five reset strategies."
 	@echo "  baseline-snapshot  Capture the Target SUT current state as a baseline."
@@ -80,6 +81,13 @@ logs:
 
 ps:
 	$(COMPOSE) ps
+
+migrate:
+	@echo "[migrate] applying SQL migrations to running Postgres"
+	@for f in apps/target-healthcare-api/migrations/*.sql; do \
+		echo "  -> $$f"; \
+		$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-atdm} -d $${POSTGRES_DB:-target_healthcare} -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/$$(basename $$f); \
+	done
 
 demo:
 	@echo "[demo] end-to-end intent-to-data demo (Phase 9 deliverable — not yet implemented)"

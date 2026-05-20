@@ -69,6 +69,9 @@ markers = [
     "integration: integration tests that require the docker compose stack to be running",
     "e2e: end-to-end tests that bring up and tear down the docker compose stack",
 ]
+# pytest-asyncio configuration. "auto" mode marks every `async def test_...`
+# automatically; no need to decorate each one.
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
@@ -90,4 +93,7 @@ dev = [
     "httpx>=0.27.0",
     "fastapi<0.120,>=0.115",
     "uvicorn[standard]<0.40,>=0.32",
+    "asyncpg<0.32,>=0.30",
+    "pytest-asyncio<0.27,>=0.24",
+    "asyncpg-stubs<1,>=0.30",
 ]

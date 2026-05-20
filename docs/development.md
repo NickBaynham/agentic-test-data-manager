@@ -138,6 +138,52 @@ separation: `lint` and `test` jobs are Docker-free; the `stack` job runs
    test under `tests/integration/`.
 5. Run `make lint && make test && make test-integration` before commit.
 
+## Database schema and migrations
+
+The Target SUT schema lives in `apps/target-healthcare-api/migrations/`. Files
+are `NNNN_<description>.sql` in sequence — `0001_init.sql` lands the seven
+entities and the baseline reference data (procedure / diagnosis codes).
+
+### How migrations are applied
+
+- **On a fresh Postgres volume:** the compose file bind-mounts `migrations/`
+  into `/docker-entrypoint-initdb.d/` on the postgres container. Files in
+  that directory are executed **once** when the data directory is first
+  initialized.
+- **On an existing volume:** `make migrate` runs every `.sql` file in the
+  directory against the running Postgres via `psql`. The Phase 2 migration
+  uses `CREATE TABLE IF NOT EXISTS` and `INSERT ... ON CONFLICT DO NOTHING`
+  so it is idempotent — re-applying does nothing.
+- **After schema changes (during dev):** the simplest path is
+  `make down-clean && make up`. This wipes the Postgres volume so the
+  entrypoint re-runs from scratch. `make down-clean` is destructive — only
+  run it when you intend to throw away local data.
+
+### Schema overview (Phase 2)
+
+Seven entities per [BRD §9](../requirements/BRD.md):
+
+- `plan`, `provider`, `member`, `eligibility`, `claim` — mutable, every row
+  carries `test_run_id NOT NULL` with an index (DR-001 — required for the
+  `reset_run` strategy in Phase 5).
+- `procedure_code`, `diagnosis_code` — reference tables; `test_run_id` is
+  nullable so baseline rows (shared across all runs) coexist with per-run
+  "invalid" codes that drive denial scenarios.
+
+NFR-010 markers are enforced at two levels:
+
+- **Pydantic models** (fast feedback, returns 422 before DB round-trip).
+- **DB CHECK constraints** (defense in depth, catches inserts that bypass
+  the agent): `member.first_name`/`last_name` must start with `FAKE_`;
+  `member.address_state` must equal `ZZ`.
+
+### Inspecting the schema
+
+```bash
+docker exec atdm_postgres psql -U atdm -d target_healthcare -c "\dt"
+docker exec atdm_postgres psql -U atdm -d target_healthcare -c "\d+ member"
+```
+
 ## Cold-start benchmark (NFR-001)
 
 To measure the stack cold-start budget (NFR-001: ≤ 60 seconds p95 over 5 runs):
@@ -161,6 +207,33 @@ Sample output on a reference Mac (M2, 16 GB):
 ```
 
 If p95 exceeds 60s on your hardware, investigate before scaling up the stack.
+
+## Member entity (Phase 2 — internal use)
+
+The Target SUT exposes Member CRUD under `/internal/`. These routes are
+consumed by the agent's seeder (Phase 3+), not by humans, but they're
+documented here for visibility.
+
+```bash
+# Create a plan first (Member.plan_id is a FK)
+docker exec atdm_postgres psql -U atdm -d target_healthcare -c \
+  "INSERT INTO plan VALUES ('plan-dev', 'Dev Plan', 'hmo', '2026-01-01', 'dev-run');"
+
+# Create a member via the internal route
+curl -fsS -X POST http://localhost:18000/internal/members \
+  -H 'content-type: application/json' \
+  -d '{"member_id":"m-dev","status":"active","first_name":"FAKE_Alice",
+       "last_name":"FAKE_Smith","date_of_birth":"1990-04-12",
+       "address":{"line1":"1 FAKE_Way","city":"FAKE_Town","state":"ZZ","zip":"00000"},
+       "plan_id":"plan-dev","test_run_id":"dev-run"}'
+
+# Count and delete
+docker exec atdm_postgres psql -U atdm -d target_healthcare -tA -c \
+  "SELECT COUNT(*) FROM member WHERE test_run_id='dev-run';"
+curl -fsS -X DELETE "http://localhost:18000/internal/members?run_id=dev-run"
+```
+
+Browse the full OpenAPI doc at `http://localhost:18000/docs`.
 
 ## Troubleshooting
 
@@ -210,6 +283,17 @@ The fixture will skip tear-down, and the warm-start e2e test will skip.
 
 Verify the container is healthy: `make ps`. Default credentials are in
 `.env.example` (`MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`).
+
+### Tables are missing or schema looks wrong after schema changes
+
+Postgres's `docker-entrypoint-initdb.d/` runs **only** when the data directory
+is empty. If you've already brought up the stack and then changed the
+migration files, the changes won't apply. Two ways forward:
+
+- `make down-clean && make up` — wipes the postgres volume and lets the
+  entrypoint re-run from scratch. Destructive.
+- `make migrate` — runs every `.sql` file against the live Postgres via
+  `psql`. Works if the migration is idempotent (the Phase 2 one is).
 
 ### `make lint` fails with `Duplicate module named "app"`
 

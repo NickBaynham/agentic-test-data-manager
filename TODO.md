@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 2 — Target SUT minimum: schema and repositories.** See [planning/PLAN.md](planning/PLAN.md#phase-2--target-sut-minimum-schema-and-repositories).
+**Phase 3 — First vertical slice: one scenario, one entity, one reset path.** See [planning/PLAN.md](planning/PLAN.md#phase-3--first-vertical-slice-one-scenario-one-entity-one-reset-path).
 
 ## Open MVP work (Phases 1–10)
 

@@ -14,6 +14,15 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 2 — Target SUT schema and Member entity (2026-05-20)
+
+- Seven-entity Postgres schema landed via Postgres `docker-entrypoint-initdb.d/`. Idempotent — re-applies cleanly via `make migrate`.
+- `test_run_id` discipline on every mutable table; reference tables permit NULL for baseline rows.
+- NFR-010 markers enforced **twice** (Pydantic + DB CHECK): non-`FAKE_` names and non-`ZZ` states fail at the application boundary AND at the DDL layer.
+- Member CRUD via internal routes (`POST` / `DELETE /internal/members?run_id=`). Single-SQL-surface repository pattern; asyncpg pool managed by FastAPI lifespan.
+- Typed error mapping: unique-violation → 409, FK-violation → 422, CHECK-violation → 422.
+- 10 new integration tests across schema sanity, happy path, scoping, validation, and edge cases.
+
 ### Phase 1 — local stack (2026-05-20)
 
 - `docker compose up` brings up Postgres 16, MinIO, the Target SUT FastAPI stub, and the ATDM agent FastAPI stub. All long-running services healthy within 18s (p95 over 5 runs) — well under the 60s NFR-001 budget.
@@ -29,7 +38,6 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 2.** Target SUT schema (7 entities, `test_run_id` discipline); Member repository.
 - **Phase 3.** First end-to-end slice: `active_member_clean` request → seed → audit → reset.
 - **Phase 4.** All 7 entities, all 5 scenarios, validator-gated atomic seeding.
 - **Phase 5.** All five reset strategies (`reset_run`, `reset_all`, `baseline_snapshot`, `baseline_restore`, `idempotent_seed`).

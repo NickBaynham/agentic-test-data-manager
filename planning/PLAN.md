@@ -192,6 +192,8 @@ pdm run pytest tests/integration/test_stack_up.py -k healthy
 
 ## Phase 2 — Target SUT minimum: schema and repositories
 
+> **STATUS: COMPLETE — 2026-05-20.** All exit criteria met. 7-table schema with `test_run_id` discipline and NFR-010 CHECK constraints applied via Postgres `docker-entrypoint-initdb.d/`. Member Pydantic model + async repository + internal routes wired with typed error mapping (409 / 422). 10 new integration tests added (16 total in suite), all passing. See [CHANGELOG.md "Added — 2026-05-20 — Phase 2"](../CHANGELOG.md).
+
 **Goal.** Target SUT has the 7-entity schema with `test_run_id` discipline; repository methods exist for Member only; migrations apply on container start.
 
 **Inputs.** Phase 1 complete.
@@ -208,6 +210,25 @@ pdm run pytest tests/integration/test_stack_up.py -k healthy
 - `apps/target-healthcare-api/app/routes/member.py` — internal routes used by the seeder: `POST /internal/members`, `DELETE /internal/members?run_id=...`.
 - Migration runs on container startup via an entrypoint script.
 - Unit tests on the Member repository against a Postgres test container (`testcontainers-python`) or against the docker-compose Postgres.
+
+**Known pitfall (discovered in Phase 2) — Postgres `docker-entrypoint-initdb.d/` runs once.**
+
+The `/docker-entrypoint-initdb.d/` directory in the official `postgres:16` image is processed **only when the data directory is empty**. If you bring up the stack in Phase 1 (no migrations mounted), then in Phase 2 you add migrations and re-run `make up`, the entrypoint sees a non-empty data directory and skips them entirely. You'll get a healthy stack with zero tables.
+
+Resolution — bake this in during Phase 2:
+
+1. Phase 2 migrations use `CREATE TABLE IF NOT EXISTS` and `INSERT ... ON CONFLICT DO NOTHING` so they are idempotent and safe to re-apply.
+2. Provide a `make migrate` target that runs every `.sql` file in the migrations directory against the live Postgres via `psql`. This works on any state of the data directory and is the recommended path for incremental schema changes during dev.
+3. For a true reset, document `make down-clean && make up` (destructive — wipes the volume). Used when you need the entrypoint to re-fire on a known-empty data directory.
+4. Document all of the above in `docs/development.md` so future contributors know the three paths.
+
+In Phase 3+ where migrations grow more complex, consider replacing the entrypoint pattern with a dedicated migration tool (alembic, dbmate, atlas) that tracks applied state in a `schema_migrations` table. The entrypoint pattern is fine for Phase 2's single-file schema.
+
+**Other Phase 2 lessons learned (lower-impact):**
+
+- `asyncpg` ships no type stubs. With `mypy --strict`, add `asyncpg-stubs` as a dev dep. Without stubs you get `Skipping analyzing "asyncpg": module is installed, but missing library stubs` errors that block lint.
+- `pool.acquire()` yields `PoolConnectionProxy[Any]`, not `Connection[Any]`. Annotate the context-manager return type accordingly.
+- `pytest-asyncio` 0.26 requires `pytest < 9` (transitively downgrades pytest). Pin if you depend on pytest 9 features.
 
 **Exit criteria.**
 

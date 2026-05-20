@@ -3,3 +3,4 @@
 # unit tests and container-side runtime match.
 fastapi>=0.115,<0.120
 uvicorn[standard]>=0.32,<0.40
+asyncpg>=0.30,<0.32

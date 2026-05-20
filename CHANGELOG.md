@@ -4,6 +4,30 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-20 — Phase 2 Target SUT schema and Member entity
+
+- `apps/target-healthcare-api/migrations/0001_init.sql` lands all seven entities from BRD §9 (`plan`, `provider`, `member`, `eligibility`, `claim`, `procedure_code`, `diagnosis_code`).
+  - `test_run_id` discipline (DR-001) on every mutable table with an index.
+  - Reference tables (`procedure_code`, `diagnosis_code`) allow `test_run_id` NULL for baseline rows shared across runs.
+  - DB CHECK constraints enforce NFR-010 markers at the DDL layer: `member.first_name` / `last_name LIKE 'FAKE\_%'` and `member.address_state = 'ZZ'`.
+  - FK constraints: Member → Plan, Eligibility → Member, Claim → Member / Provider / ProcedureCode / DiagnosisCode.
+  - Baseline reference data seeded: 4 procedure codes (including one invalid for denial scenarios), 4 diagnosis codes (likewise).
+- Migrations auto-apply via Postgres's `docker-entrypoint-initdb.d/` on fresh volume init. `make migrate` re-applies on demand to a running stack (idempotent via `CREATE TABLE IF NOT EXISTS` and `INSERT ... ON CONFLICT DO NOTHING`).
+- `apps/target-healthcare-api/app/db/session.py` — asyncpg connection pool managed by FastAPI lifespan (`init_pool` on startup, `close_pool` on shutdown). `connection()` async context manager for repository use.
+- `apps/target-healthcare-api/app/models/member.py` — Pydantic v2 `Member` and `Address` models with field validators enforcing NFR-010 markers in the application layer.
+- `apps/target-healthcare-api/app/repositories/member.py` — single SQL surface for the Member table. `insert_member`, `delete_by_run_id`, `count_by_run_id`, `get_by_id`. Parameterized queries only.
+- `apps/target-healthcare-api/app/routes/member.py` — internal routes `POST /internal/members` and `DELETE /internal/members?run_id=...`. Maps asyncpg-level errors to typed HTTP responses: unique violation → 409, FK violation → 422, CHECK violation → 422.
+- Target SUT `main.py` wires the Member router and the asyncpg lifespan.
+- Project deps: `asyncpg`, `asyncpg-stubs` (mypy strict needs them), `pytest-asyncio` (with `asyncio_mode = "auto"`). Mirrored into `apps/target-healthcare-api/requirements.txt`.
+- 10 new integration tests under `tests/integration/test_member_repository.py`:
+  - Schema sanity: all 7 tables present; baseline reference data seeded.
+  - Happy path: insert → count=1 → delete → count=0.
+  - `test_run_id` scoping: deleting run A leaves run B intact.
+  - Pydantic validation: non-`FAKE_` first_name and non-`ZZ` state both return 422 before any DB round-trip.
+  - DB CHECK enforcement: bypassing Pydantic via direct psql still fails with `check constraint`.
+  - FK violation surfaces as 422 (not 500); duplicate PK surfaces as 409.
+- `make migrate` Makefile target.
+
 ### Added — 2026-05-20 — Phase 1 local stack
 
 - `infra/docker-compose.yml` defining 5 services:
@@ -51,3 +75,6 @@ All notable changes to this project are recorded here. Newest first.
 - 2026-05-19 — **Default host ports collide with other local stacks.** A common dev laptop already runs Postgres on `5432` and MinIO on `9000`/`9001` for unrelated projects. Phase 1 would have failed `make up` with `bind: address already in use`. Resolution: shifted host ports to `55432` (Postgres), `19000`/`19001` (MinIO), `18000` (Target SUT), `18001` (ATDM agent). Container-internal ports are unchanged. Locked into [planning/PLAN.md Phase 1 host port mapping table](planning/PLAN.md#phase-1--docker-compose-postgres-minio-two-service-stubs); referenced from README Quickstart and `.env.example`.
 - 2026-05-20 — **The duplicate-`app` mypy trap extends to pytest.** Phase 1's per-app FastAPI stubs both ship a `tests/test_main.py` that does `from app.main import app`. If `pyproject.toml`'s `testpaths` includes both apps, a single `pdm run pytest` invocation imports both `app` modules and the second one wins — silently testing against the wrong code or failing with `ImportError`. Resolution: `testpaths` lists only the top-level `tests`; the `Makefile test` target invokes pytest three times (once per source root) with `PYTHONPATH` set. Mirrors the existing mypy pattern. Documented in [PLAN.md Phase 0 Known pitfall](planning/PLAN.md), now extended with a pytest section.
 - 2026-05-20 — **Ruff isort sorts `app.main` before `fastapi` unless told otherwise.** Ruff treats unknown top-level packages as third-party by default. Since `app` is first-party in this repo, ruff sorted `from app.main import app` before `from fastapi.testclient import TestClient`, which fails its own isort rule. Resolution: declare `known-first-party = ["app", "atdm"]` in `[tool.ruff.lint.isort]`. Trivial fix, would have eaten 10 minutes if discovered during commit instead of during the first `make lint` after adding the FastAPI stubs.
+- 2026-05-20 — **Postgres `docker-entrypoint-initdb.d/` is a one-shot, not a migration tool.** When Phase 2 added a migration file and bind-mounted it into the existing (Phase 1) stack, `make up` brought everything healthy but zero tables existed — Postgres skips the entrypoint when the data directory is already initialized. Resolution: migrations are idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT ... ON CONFLICT DO NOTHING`); `make migrate` re-applies via `psql` against the live stack; `make down-clean && make up` is documented as the reset path. The three options are written into PLAN.md Phase 2 "Known pitfall" and `docs/development.md`.
+- 2026-05-20 — **`asyncpg` has no type stubs.** Mypy `--strict` flags every import. Resolution: add `asyncpg-stubs` as a dev dep. Also note: `pool.acquire()` yields `PoolConnectionProxy[Any]`, not `Connection[Any]` — annotate accordingly.
+- 2026-05-20 — **`pytest-asyncio` 0.26 forces `pytest < 9`.** Adding `pytest-asyncio` silently downgraded `pytest` from 9.0.3 to 8.4.2. Not a blocker for us, but worth knowing if you depend on pytest 9 features. Pin both explicitly if it matters.

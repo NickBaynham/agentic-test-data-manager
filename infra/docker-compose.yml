@@ -29,6 +29,10 @@ services:
       - "55432:5432"
     volumes:
       - atdm_postgres_data:/var/lib/postgresql/data
+      # Migrations are auto-applied by Postgres on FIRST volume initialization.
+      # Re-run with `make down-clean && make up` after schema changes. The
+      # integration test fixture also re-applies via psql for safety.
+      - ../apps/target-healthcare-api/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atdm} -d ${POSTGRES_DB:-target_healthcare}"]
       interval: 2s
