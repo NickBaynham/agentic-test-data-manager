@@ -129,12 +129,17 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-atdm}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-atdm-dev-only}
+      # Phase 6: where Playwright JSON / pytest module fixtures land.
+      # Bound to ../automation/fixtures on the host so the test runner can
+      # consume them.
+      ATDM_FIXTURE_DIR: /fixtures
     command: >
       sh -c "pip install --no-cache-dir -r requirements.txt &&
              uvicorn app.main:app --host 0.0.0.0 --port 8001"
     volumes:
       - ../apps/test-data-agent:/app
       - atdm_pip_cache:/root/.cache/pip
+      - ../automation/fixtures:/fixtures
     ports:
       - "18001:8001"
     healthcheck:

@@ -4,6 +4,15 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-20 — Phase 6 fixture delivery
+
+- `apps/test-data-agent/app/fixtures/playwright.py` writes a JSON fixture per scenario request to `ATDM_FIXTURE_DIR/<scenario>_<run_id>.json`. Shape: `{scenario_id, test_run_id, data, cleanup}`.
+- `apps/test-data-agent/app/fixtures/pytest_module.py` writes an importable Python module per scenario request to `ATDM_FIXTURE_DIR/<scenario>_<run_id>.py`. Exposes `SCENARIO_ID`, `TEST_RUN_ID`, and `scenario_data() -> dict`.
+- `POST /test-data/requests` honors `delivery.return_playwright_fixture` / `delivery.return_pytest_fixture`. The response's `fixtures` block carries absolute paths (or `null`). New audit event `fixtures_emitted` records what was written.
+- `infra/docker-compose.yml`: bind-mount `../automation/fixtures` → `/fixtures` on the agent; `ATDM_FIXTURE_DIR=/fixtures`. Host sees written fixtures under `automation/fixtures/`.
+- pytest module embeds the payload via `repr()` on the dict (not as embedded JSON in a triple-quoted string) so backslashes and quotes round-trip cleanly.
+- 6 new unit tests for the writers + 4 new integration tests covering D1/D2 acceptance and the audit event.
+
 ### Added — 2026-05-20 — Phase 5 full reset strategy surface
 
 All five reset strategies live and demoable from the agent's HTTP API. The
@@ -159,3 +168,4 @@ lifecycle works end-to-end against the local stack.
 - 2026-05-20 — **Per-entity `_force_cleanup` helpers break when a phase adds new entities.** Phase 3 tests' helper did `DELETE FROM member; DELETE FROM plan`. Phase 4 added Eligibility and Claim, both FK-referencing Member, so the old helper failed with a constraint violation. Resolution: switch every test's cleanup to the atomic bundle DELETE (`DELETE /internal/scenarios?run_id=...`) which handles FK order centrally. **General rule**: cleanup helpers should call the most atomic DELETE the API exposes, not enumerate tables — adding a new entity to a phase shouldn't require touching every prior phase's tests.
 - 2026-05-20 — **PoolConnectionProxy vs Connection — type alias is the clean fix.** Adding transaction-aware repositories (Phase 4) re-surfaced the asyncpg "Pool.acquire() yields PoolConnectionProxy, not Connection" issue from Phase 2. Six repos all needed the same union type. Resolution: a single `type DbConn = asyncpg.Connection[Any] | asyncpg.pool.PoolConnectionProxy[Any]` alias in `app/db/session.py`. Use the modern `type` keyword over `TypeAlias` — ruff prefers it.
 - 2026-05-20 — **A single `_pk(record)` helper that scans for `*_id` keys silently returns the wrong key.** When the Member record carries both `member_id` (PK) and `plan_id` (FK), iterating keys and returning the first match yields the FK. Subtle bug that smoke-tested fine but broke `data.member_id` in the response. Resolution: always pass the entity kind explicitly. **General rule**: helpers that scan over a fixed list of keys should never silently pick a "winner" — make the lookup explicit.
+- 2026-05-20 — **Embedding JSON inside a Python triple-quoted string breaks on backslashes.** Phase 6's pytest module first embedded `json.dumps(payload)` between `"""..."""`. JSON containing `\\Users\\fake` (Windows path) became `\Users\fake` after Python's string parsing — invalid JSON. Resolution: embed the dict via `repr()`. Python's `repr()` on built-in types (str/int/float/bool/None/list/dict) round-trips cleanly through normal module loading. **General rule**: when emitting Python source code that needs to embed runtime data, use `repr()` to produce a literal — never concatenate JSON into a string literal.

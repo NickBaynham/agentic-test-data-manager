@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 6 — Fixture delivery: Playwright JSON and pytest module.** See [planning/PLAN.md](planning/PLAN.md#phase-6--fixture-delivery-playwright-json-and-pytest-module).
+**Phase 7 — `atdm` CLI and `atdm.pytest` library.** See [planning/PLAN.md](planning/PLAN.md#phase-7--atdm-cli-and-atdmpytest-library).
 
 ## Open MVP work (Phases 1–10)
 

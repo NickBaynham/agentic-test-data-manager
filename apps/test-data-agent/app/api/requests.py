@@ -20,6 +20,8 @@ from ulid import ULID
 from app.agents.planner import resolve_plan
 from app.audit import writer as audit_writer
 from app.catalog import store as catalog_store
+from app.fixtures.playwright import write_playwright_fixture
+from app.fixtures.pytest_module import write_pytest_fixture
 from app.scenarios.registry import get_scenario
 from app.seeders import healthcare as seeder
 from app.seeders.healthcare import SeedError, ValidatorRejected
@@ -249,25 +251,52 @@ async def create_request(scenario_request: ScenarioRequest, request: Request) ->
         outputs={"status": "ready"},
     )
 
+    data_pks = {
+        "plan_id": _pk(bundle.get("plan"), "plan"),
+        "provider_id": _pk(bundle.get("provider"), "provider"),
+        "member_id": _pk(bundle.get("member"), "member"),
+        "eligibility_id": _pk(bundle.get("eligibility"), "eligibility"),
+        "claim_id": _pk(bundle.get("claim"), "claim"),
+    }
+    cleanup_payload = {
+        "cleanup_token": cleanup_token,
+        "endpoint": f"/test-data/runs/{test_run_id}/reset",
+    }
+
+    fixture_paths: dict[str, str | None] = {"playwright": None, "pytest": None}
+    if scenario_request.delivery.return_playwright_fixture:
+        path = write_playwright_fixture(
+            scenario_id=scenario.scenario_id,
+            test_run_id=test_run_id,
+            data=data_pks,
+            cleanup=cleanup_payload,
+        )
+        fixture_paths["playwright"] = str(path)
+    if scenario_request.delivery.return_pytest_fixture:
+        path = write_pytest_fixture(
+            scenario_id=scenario.scenario_id,
+            test_run_id=test_run_id,
+            data=data_pks,
+            cleanup=cleanup_payload,
+        )
+        fixture_paths["pytest"] = str(path)
+
+    if any(fixture_paths.values()):
+        audit_writer.append_event(
+            minio_client,
+            test_run_id=test_run_id,
+            invoker=invoker,
+            action="fixtures_emitted",
+            outputs={"fixtures": {k: v for k, v in fixture_paths.items() if v is not None}},
+        )
+
     return {
         "request_id": request_id,
         "test_run_id": test_run_id,
         "status": "ready",
-        "data": {
-            "plan_id": _pk(bundle.get("plan"), "plan"),
-            "provider_id": _pk(bundle.get("provider"), "provider"),
-            "member_id": _pk(bundle.get("member"), "member"),
-            "eligibility_id": _pk(bundle.get("eligibility"), "eligibility"),
-            "claim_id": _pk(bundle.get("claim"), "claim"),
-        },
-        "fixtures": {
-            "playwright": None,
-            "pytest": None,
-        },
-        "cleanup": {
-            "cleanup_token": cleanup_token,
-            "endpoint": f"/test-data/runs/{test_run_id}/reset",
-        },
+        "data": data_pks,
+        "fixtures": fixture_paths,
+        "cleanup": cleanup_payload,
     }
 
 

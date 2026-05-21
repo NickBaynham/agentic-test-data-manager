@@ -14,6 +14,13 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 6 — Fixture delivery (2026-05-20)
+
+- `POST /test-data/requests` writes a Playwright JSON fixture and/or an importable pytest Python module to `ATDM_FIXTURE_DIR/<scenario>_<run_id>.{json,py}` when the delivery flags are set.
+- Host sees emitted fixtures under `automation/fixtures/` via the docker compose bind-mount.
+- pytest module exposes `SCENARIO_ID`, `TEST_RUN_ID`, `scenario_data() -> dict`. Importable from any test runner.
+- New `fixtures_emitted` audit event records what was written.
+
 ### Phase 5 — Full reset strategy surface (2026-05-20)
 
 - All five reset strategies demoable from the agent's HTTP API: `reset_run`, `reset_all`, `baseline_snapshot`, `baseline_restore`, and `idempotent_seed` (property of restore).
@@ -67,7 +74,6 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 6.** Playwright JSON + pytest module fixture emitters.
 - **Phase 7.** `atdm` CLI and `atdm.pytest` library.
 - **Phase 8.** Audit HTML page + AR-003 architecture fitness test in CI.
 - **Phase 9.** `make demo`, README final, design-decisions doc.

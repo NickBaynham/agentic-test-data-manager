@@ -426,7 +426,11 @@ make smoke   # exercises all five strategies end-to-end via CLI
 
 ## Phase 6 — Fixture delivery: Playwright JSON and pytest module
 
-**Goal.** Every fulfilled scenario request optionally writes a Playwright JSON fixture and a pytest Python module to `ATDM_FIXTURE_DIR`, named `<scenario>_<run_id>.{json,py}`.
+> **STATUS: COMPLETE — 2026-05-20.** D1 + D2 acceptance blocks verified end-to-end against the live stack. `delivery.return_playwright_fixture` and `delivery.return_pytest_fixture` honored; files land under `ATDM_FIXTURE_DIR` (mounted to `automation/fixtures/` on the host); response `fixtures` block carries paths; `fixtures_emitted` audit event recorded. 6 new unit tests for the writers + 4 integration tests. **100 tests passing total (53 unit + 47 integration).**
+
+**Known pitfall (discovered in Phase 6):**
+
+- **Embedding JSON inside a Python triple-quoted string breaks on backslashes.** The first version of the pytest-module writer concatenated `json.dumps(payload)` between `"""..."""`. Payloads containing `\\Users\\fake` (Windows paths) became `\Users\fake` after Python parsed the source file — invalid JSON. **Resolution baked into the writer**: embed the payload via `repr()` on the dict, not as embedded JSON. Python's `repr()` on built-in types round-trips cleanly through normal module loading. **General rule for codegen**: when emitting Python source that needs to embed runtime data, use `repr()` to produce a literal — never concatenate non-Python strings into a string literal.
 
 **Inputs.** Phase 5 complete.
 

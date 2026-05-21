@@ -259,6 +259,32 @@ curl -fsS -X POST "http://localhost:18001/test-data/runs/$RUN/reset" \
 | `out_of_network_pending_claim` | Active member, out-of-network provider, claim pending review. |
 | `inactive_member_with_history` | Inactive member with historical paid claim (soft-delete semantics). |
 
+### Fixture delivery (Phase 6)
+
+A scenario request can optionally emit a Playwright JSON fixture and/or a
+pytest Python module fixture for the test runner to consume.
+
+```bash
+curl -fsS -X POST http://localhost:18001/test-data/requests \
+  -H 'authorization: Bearer dev-token-change-me' \
+  -H 'content-type: application/json' \
+  -d '{"scenario":"claim_denial_active_member",
+       "delivery":{"return_playwright_fixture":true,"return_pytest_fixture":true}}'
+```
+
+The response's `fixtures.playwright` and `fixtures.pytest` carry the absolute
+container-side paths. On the host, the files appear under
+`automation/fixtures/<scenario>_<run_id>.{json,py}` via the bind-mount.
+
+- **Playwright JSON shape**: `{scenario_id, test_run_id, data, cleanup}`.
+  A Playwright test can `JSON.parse(fs.readFileSync(...))` and use the keys
+  directly.
+- **pytest module**: exposes `SCENARIO_ID`, `TEST_RUN_ID`, and a
+  `scenario_data() -> dict` function. Import via `importlib.util` from a
+  pytest test, or (Phase 7) use the `atdm.pytest` decorator.
+
+Fixture writes emit a `fixtures_emitted` audit event with the paths written.
+
 ### Reset strategies (Phase 5)
 
 Five strategies, each demoable from the ATDM agent's HTTP API.
