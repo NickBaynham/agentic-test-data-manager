@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 9 — `make demo`, README final, design-decisions doc.** See [planning/PLAN.md](planning/PLAN.md#phase-9--make-demo-readme-design-decisions-doc).
+**Phase 10 — Hardening, asciinema cast, project-wide Definition of Done.** See [planning/PLAN.md](planning/PLAN.md#phase-10--hardening-polish-and-merge-to-main).
 
 ## Open MVP work (Phases 1–10)
 

@@ -7,7 +7,7 @@
 PDM ?= pdm
 COMPOSE ?= docker compose -f infra/docker-compose.yml
 
-.PHONY: help setup lint test test-unit test-integration build up down down-clean logs ps migrate demo smoke baseline-snapshot reset-baseline clean playwright-install playwright-test
+.PHONY: help setup lint test test-unit test-integration build up down down-clean logs ps migrate demo smoke baseline-snapshot reset-baseline clean playwright-install playwright-test audit-screenshot
 
 help:
 	@echo "Agentic Test Data Manager — Make targets"
@@ -95,9 +95,9 @@ migrate:
 		$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-atdm} -d $${POSTGRES_DB:-target_healthcare} -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/$$(basename $$f); \
 	done
 
-demo:
-	@echo "[demo] end-to-end intent-to-data demo (Phase 9 deliverable — not yet implemented)"
-	@false
+demo: up
+	@echo "[demo] end-to-end intent-to-data demo (≤90s)"
+	./scripts/demo.sh
 
 smoke:
 	@echo "[smoke] reset-strategy round-trip (Phase 5+ deliverable — not yet implemented)"
@@ -124,3 +124,8 @@ playwright-test:
 	@echo "[playwright-test] run example Playwright spec (requires FIXTURE_PATH)"
 	@test -n "$$FIXTURE_PATH" || (echo "FIXTURE_PATH must point at a JSON fixture from 'atdm request ... --playwright'"; exit 2)
 	cd automation/playwright && npx playwright test
+
+audit-screenshot:
+	@echo "[audit-screenshot] capture docs/assets/audit-trail.png (requires stack up + playwright-install)"
+	mkdir -p docs/assets
+	cd automation/playwright && node take_audit_screenshot.mjs

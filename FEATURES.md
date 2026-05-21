@@ -14,6 +14,14 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 9 — make demo, README final, design docs (2026-05-21)
+
+- `make demo` runs the full intent → seed → test → reset → audit loop in **3 seconds** on a warm stack (90s budget).
+- `docs/assets/audit-trail.png` — live capture of the audit UI for the headline demo run.
+- `make audit-screenshot` target — regenerates the PNG on demand via headless Chromium.
+- Five new docs: `demo-script.md`, `architecture.md` (with mermaid diagrams), `healthcare-domain-model.md`, `recruiter-summary.md` (one-page portfolio summary), plus a rewritten `README.md` (219 lines, under the 400-line ceiling).
+- The README leads with the audit-trail screenshot — the portfolio differentiator.
+
 ### Phase 8 — Audit HTML page and architecture fitness tests (2026-05-20)
 
 - `GET /ui/audit/{run_id}` — server-rendered HTML page with Pico.css. Reviewer can click through any run's trail in a browser. ~11 KB; 100 KB ceiling.
@@ -92,5 +100,4 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 9.** `make demo`, README final, design-decisions doc.
 - **Phase 10.** Hardening, asciinema cast, project-wide Definition of Done complete.

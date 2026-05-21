@@ -4,6 +4,43 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-21 — Phase 9 make demo, README final, design docs
+
+The polish phase. `make demo` runs the full intent → seed → test → reset →
+audit loop in **3 seconds** on a warm stack (budget: 90s). Five new
+documentation files turn the repo into a portfolio-ready artifact.
+
+- **`make demo`** orchestrates the end-to-end flow via `scripts/demo.sh`:
+  health probe → `atdm request` → pytest example → `atdm reset` →
+  `atdm audit` → prints the UI URL. Exits non-zero if the wall-clock budget
+  is exceeded.
+- **`automation/pytest-api/test_example_claim_denial.py`** — the test the
+  demo runs. Loads the just-emitted pytest fixture module and asserts
+  on its content.
+- **`scripts/demo.sh`** — the orchestration script. Idempotent on warm
+  stacks; can also be invoked directly without `make`.
+- **`automation/playwright/take_audit_screenshot.mjs`** + `make audit-screenshot`
+  target — captures `docs/assets/audit-trail.png` from the live UI via
+  headless Chromium. Documented as a one-time step in the demo guide.
+- **`docs/demo-script.md`** — step-by-step reviewer guide showing what
+  each phase of `make demo` does and what the output means.
+- **`docs/architecture.md`** — mermaid component diagram, per-component
+  responsibilities, request lifecycle (9-event audit trail), the
+  architecture rules table.
+- **`docs/healthcare-domain-model.md`** — full data dictionary with
+  mermaid ERD, CHECK constraints, ID conventions, example records, and
+  the rationale for choosing a synthetic healthcare domain.
+- **`docs/recruiter-summary.md`** — one-page plain-language summary.
+  "What it is", "what it proves", key technologies, demo invitation.
+- **`README.md`** rewritten for the portfolio audience. 219 lines (well
+  under the 400-line NFR-009 ceiling). Opens with "what this proves",
+  embeds the audit-trail screenshot, indexes every doc in the repo,
+  documents the security model and data-ethics posture explicitly.
+- **`docs/assets/audit-trail.png`** — 1100×3362 PNG of the live audit
+  UI for the `claim_denial_active_member` scenario. Captured via
+  Playwright; first event details auto-expanded so the reviewer sees
+  that the UI is interactive.
+
 ### Added — 2026-05-20 — Phase 8 audit HTML page + architecture fitness tests in CI
 
 The portfolio differentiator phase. Two big deliverables: a browser-readable
@@ -206,3 +243,4 @@ lifecycle works end-to-end against the local stack.
 - 2026-05-20 — **Typer global options must precede the subcommand.** `atdm request scenario -o json` fails with "No such option '-o'" because `--output` is on the root callback, not on `request`. Correct form: `atdm -o json request scenario`. **General rule**: global CLI options live on the callback and bind at parse time before the subcommand resolves; this is consistent with Click conventions but worth knowing for tests and docs.
 - 2026-05-20 — **The duplicate-package mypy trap extends a third time to `tests/`.** When Phase 7 added `apps/test-data-agent/python/tests/`, mypy refused because `apps/test-data-agent/tests/` already declared a package called `tests`. Resolution: same as the original `app` trap from Phase 0 — add a fourth mypy invocation in the Makefile for the new source root. The `test-data-agent` mypy call now explicitly lists `apps/test-data-agent/app apps/test-data-agent/tests` so it doesn't sweep `python/`. **General rule**: every new package root under an existing `apps/<name>/` subtree needs its own mypy invocation.
 - 2026-05-20 — **`pytest.request.addfinalizer` runs BEFORE yield-based fixture teardowns.** I tried to verify "the decorator's teardown emits a `reset_completed` audit event" by registering a finalizer inside the test body. The finalizer ran first (LIFO from the test's perspective), then the `atdm_data` fixture's teardown ran, so the audit trail was inspected pre-reset. Resolution: cover the property at the unit level (pytester with a mock client) instead of fighting fixture-ordering at the integration level. **General rule**: cross-fixture verification needs a session-scoped tracker, not a test-scoped finalizer.
+- 2026-05-21 — **Node ESM resolves modules from the script's directory, not the CWD.** First attempt placed the screenshot script under `scripts/` and tried `cd automation/playwright && node ../../scripts/take_audit_screenshot.mjs`. Node failed to find `@playwright/test` because module resolution walks upward from the script's location. Resolution: move the script into `automation/playwright/` next to `node_modules/`. **General rule for Node scripts**: keep them in the same package they depend on; the PYTHONPATH-style "run from a directory with the modules" trick doesn't work for ESM.

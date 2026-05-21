@@ -1,86 +1,219 @@
 # Agentic Test Data Manager (ATDM)
 
-> **Status:** In development — Phase 3 (first end-to-end vertical slice landed).
-> ![CI](https://github.com/NickBaynham/agentic-test-data-manager/actions/workflows/ci.yml/badge.svg)
+> AI-augmented test-data platform. Automation engineers and AI testing agents
+> request scenario-grounded synthetic data by intent, consume it via
+> framework-native fixtures, and reset cleanly afterward — with a full audit
+> trail of every action the agent took.
 
-A local-first Quality Intelligence component for test data provisioning. Automation engineers and AI testing agents request scenario-grounded synthetic test data by intent and receive a validated dataset, a Playwright / pytest fixture, and a cleanup contract that guarantees the test environment can be restored.
+[![CI](https://github.com/NickBaynham/agentic-test-data-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/NickBaynham/agentic-test-data-manager/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
 
-## What this proves (target portfolio outcomes)
+## What this proves
 
-- Safe agentic QA architecture (tool-bounded planner, deterministic validators, auditable invocations).
-- Test data lifecycle competence (generate, seed, reset, restore).
-- Reusable, idiomatic Python that meets `ruff` + `mypy --strict` and ≥ 80 % coverage on core modules.
-- Quality Intelligence linkage — every scenario can name the requirements it exercises.
+- **Safe agentic QA architecture.** The agent's plan is gated by deterministic
+  validators before any SQL fires. The "no SQL from agent code" claim is a
+  CI-enforced architecture fitness test, not documentation.
+- **Test data lifecycle competence.** Generate, seed, audit, reset, restore.
+  All five reset strategies (`reset_run`, `reset_all`, `baseline_snapshot`,
+  `baseline_restore`, `idempotent_seed`) live and demoable.
+- **API design for autonomous testing agents.** `POST /test-data/requests`
+  returns a complete contract: entity PKs, fixture file paths, a one-time
+  cleanup token, and an audit URL.
+- **Quality intelligence wired in.** Every scenario carries
+  `linked_requirement_ids[]` so future phases can join scenarios to
+  requirements and surface coverage gaps.
 
-The full case is built up phase-by-phase in [planning/PLAN.md](planning/PLAN.md). The architecture, decisions, and acceptance criteria live in [requirements/](requirements/).
+![Audit trail UI](docs/assets/audit-trail.png)
 
-## Documentation
+*Above: `GET /ui/audit/{run_id}` — server-rendered HTML page showing one
+scenario run from request through reset. Pico.css from a CDN, no
+JavaScript build. The full audit trail and its underlying Parquet schema
+are documented in [docs/design-decisions.md](docs/design-decisions.md).*
 
-| Document | Purpose |
-|---|---|
-| [requirements/concept.md](requirements/concept.md) | Original product concept and stack recommendation. |
-| [requirements/BRD.md](requirements/BRD.md) | Canonical Business Requirements Document (18 sections). |
-| [requirements/engineering-handoff.md](requirements/engineering-handoff.md) | Engineering-ready breakdown (epics, stories, APIs, tests). |
-| [planning/PLAN.md](planning/PLAN.md) | 10-phase MVP build plan. |
-| [CHANGELOG.md](CHANGELOG.md) | Per-change history. |
-| [FEATURES.md](FEATURES.md) | What ships in MVP. |
-| [TODO.md](TODO.md) | Phase 2+ items not yet built. |
-| [docs/development.md](docs/development.md) | Engineer's day-to-day guide. |
-
-## Quickstart
+## Try it (90 seconds)
 
 ```bash
-# One-time setup
-make setup                  # pdm install
-cp .env.example .env.local  # optional — defaults are fine for local dev
-
-# Bring up the local stack (Postgres, MinIO, Target SUT, ATDM agent)
-make up
-
-# Hit the health endpoints
-curl -fsS http://localhost:18000/health    # Target SUT
-curl -fsS http://localhost:18001/health    # ATDM agent
-curl -fsS http://localhost:18001/metrics   # Prometheus text
-
-# When you're done
-make down
+make setup       # pdm install (~5s)
+make up          # docker compose, all services healthy (~18s p95)
+make demo        # full intent → seed → test → reset → audit loop (~3s)
 ```
 
-Open `http://localhost:18000/docs` or `http://localhost:18001/docs` in a browser for the auto-generated FastAPI Swagger UI. The MinIO console is at `http://localhost:19001` (credentials in `.env.example`).
+The demo prints a URL to open in a browser. See
+[docs/demo-script.md](docs/demo-script.md) for a step-by-step walkthrough.
 
-### Request a scenario (the headline endpoint)
+## What `make demo` does
+
+1. Hits the agent's health probe.
+2. Calls `atdm request claim_denial_active_member --playwright --pytest`.
+3. Runs `automation/pytest-api/test_example_claim_denial.py` against the
+   just-emitted fixture file.
+4. Calls `atdm reset <run_id>` with the cleanup token.
+5. Prints the audit trail JSON.
+6. Prints the URL to the HTML audit UI.
+
+Total wall time on a warm stack: **~3 seconds.** Budget: 90 seconds.
+
+## Architecture
+
+```
+   Reviewer / dev                   docker compose
+       |                                  |
+       |  atdm CLI                   +----+----+
+       |  @atdm_scenario --->        | Agent   |---+
+       |  Browser (audit UI)         |  :8001  |   |  POST /internal/scenarios/seed
+       |                             +----+----+   |  (atomic Postgres txn)
+                                          |        v
+                                          |    +-------+      +----------+
+                                          +--->|  SUT  +----->| Postgres |
+                                          |    | :8000 |      +----------+
+                                          |    +-------+
+                                          |        |
+                                          |        v
+                                          |    +-------+
+                                          +--->| MinIO |  audit / catalog
+                                               +-------+  / fixtures (Parquet)
+```
+
+Full diagram with a mermaid component graph: [docs/architecture.md](docs/architecture.md).
+
+## Documentation index
+
+| Question | Doc |
+|---|---|
+| 90-second demo walkthrough | [docs/demo-script.md](docs/demo-script.md) |
+| Recruiter / portfolio summary | [docs/recruiter-summary.md](docs/recruiter-summary.md) |
+| Architectural calls + worked-example audit | [docs/design-decisions.md](docs/design-decisions.md) |
+| Component diagram and data flow | [docs/architecture.md](docs/architecture.md) |
+| Domain model (7 entities, ID conventions, CHECK constraints) | [docs/healthcare-domain-model.md](docs/healthcare-domain-model.md) |
+| Dev guide (testing, CLI, troubleshooting) | [docs/development.md](docs/development.md) |
+| Original concept | [requirements/concept.md](requirements/concept.md) |
+| Business requirements | [requirements/BRD.md](requirements/BRD.md) |
+| Engineering handoff | [requirements/engineering-handoff.md](requirements/engineering-handoff.md) |
+| Phase-by-phase build plan | [planning/PLAN.md](planning/PLAN.md) |
+| What's shipped | [FEATURES.md](FEATURES.md) |
+| What's coming | [TODO.md](TODO.md) |
+| Per-PR changes + lessons learned | [CHANGELOG.md](CHANGELOG.md) |
+
+## Quickstart for users
+
+### CLI
 
 ```bash
-curl -fsS -X POST http://localhost:18001/test-data/requests \
+# After `make up`:
+atdm scenarios                                    # list registered scenarios
+atdm request claim_denial_active_member           # request data
+atdm -o json audit <run_id>                       # inspect the trail
+atdm reset <run_id> --token <cleanup_token>       # tear it down
+atdm baseline-snapshot --baseline-id golden       # capture a baseline
+atdm baseline-restore --baseline-id golden        # restore later
+```
+
+### pytest
+
+```python
+from atdm.pytest import atdm_scenario
+
+@atdm_scenario("active_member_clean")
+def test_member(atdm_data):
+    assert atdm_data["data"]["member_id"].startswith("m-")
+    # No cleanup needed — the fixture's teardown calls /reset for you.
+```
+
+### Direct HTTP
+
+```bash
+curl -X POST http://localhost:18001/test-data/requests \
   -H 'authorization: Bearer dev-token-change-me' \
   -H 'content-type: application/json' \
   -d '{"scenario":"active_member_clean"}'
 ```
 
-You'll receive a response with `test_run_id`, the seeded `member_id` / `plan_id`, and a `cleanup_token`. Use that token to tear the run down via `POST /test-data/runs/{run_id}/reset`. See [docs/development.md](docs/development.md#intent-to-data-request-phase-3--headline-endpoint) for the end-to-end example.
+Swagger UI at `http://localhost:18001/docs`.
 
-What's implemented today: Phase 0 (repo scaffold + CI), Phase 1 (Docker Compose stack), Phase 2 (target schema + Member entity), Phase 3 (intent-to-data: scenario request → seed → audit → reset for one scenario). What's coming: more scenarios + validators (Phase 4), reset strategies (Phase 5), fixtures (Phase 6), CLI (Phase 7), audit HTML page (Phase 8). See [planning/PLAN.md](planning/PLAN.md) for the full phase plan.
+## Host port mapping
 
-### Host ports
-
-The stack uses **non-default host ports** to avoid colliding with other local stacks. Full table and reasoning in [planning/PLAN.md Phase 1](planning/PLAN.md#phase-1--docker-compose-postgres-minio-two-service-stubs).
+The stack uses non-default host ports so it doesn't collide with other
+projects:
 
 | Service | Host port |
 |---|---|
 | Postgres | `55432` |
 | MinIO API | `19000` |
-| MinIO Console | `19001` |
-| Target SUT (FastAPI) | `18000` |
-| ATDM agent (FastAPI) | `18001` |
+| MinIO Console | `19001` (default creds in `.env.example`) |
+| Target SUT | `18000` |
+| ATDM agent | `18001` |
 
-## Security model (MVP)
+Container-internal ports are conventional; only the host side is remapped.
+See [planning/PLAN.md Phase 1](planning/PLAN.md#phase-1--docker-compose-postgres-minio-two-service-stubs).
 
-- Mutating endpoints will require `Authorization: Bearer ${ATDM_API_TOKEN}`. Read endpoints are open on the local network. This is portfolio-grade, not production-grade. See [BRD §16 decision #3](requirements/BRD.md#16-open-questions--resolved-2026-05-19).
+## Security model
+
+This is portfolio-grade, not production-grade. Specifically:
+
+- **Authentication**: a single shared API token (`ATDM_API_TOKEN` env var)
+  protects every mutating endpoint. Multi-user / RBAC is Phase 4+.
+- **Read endpoints are open on the local network**: `/health`, `/metrics`,
+  `/audit/runs/...`, `/ui/audit/...`, `/catalog/scenarios`,
+  `/test-data/baseline/list`. This is acceptable here because **no real
+  data ever lives in this system** (see Data ethics below).
+- **Cleanup tokens** are stored as `sha256` only (DR-007). Plaintext is
+  returned once at request time and never persisted.
+- **Audit log is append-only** at the application layer — there is no
+  HTTP route that deletes or modifies past audit events. Enforced by an
+  architecture fitness test (NFR-011) that gates CI.
+
+If a real consumer ever shows up, see
+[requirements/BRD.md §18 Phase 4](requirements/BRD.md) for the production
+hardening roadmap.
 
 ## Data ethics
 
-- All generated data is synthetic and carries a `FAKE_` prefix on identifying free-text fields and a `ZZ` fictional state code. There is no PHI, no real NPI numbers, no real SSNs. See [BRD §9](requirements/BRD.md) and NFR-010.
+All generated data is synthetic (NFR-010). The schema enforces three
+markers via database CHECK constraints, double-checked at the application
+layer:
+
+- Names: `FAKE_` prefix on every `first_name` and `last_name`.
+- Addresses: state code is always `ZZ` (a fictional state).
+- Identifiers: `npi_fake` field is just a numeric string, not a real NPI.
+
+There is no PHI, no real SSN-shaped data, and no real claims data anywhere
+in this repo. See [docs/healthcare-domain-model.md](docs/healthcare-domain-model.md)
+for the full data dictionary and example records.
+
+## Testing
+
+The project ships four test layers:
+
+| Layer | How to run | Count |
+|---|---|---|
+| Unit (per source root) | `make test` | 78 |
+| Architecture fitness | included in `make test` | 5 |
+| Integration (live stack) | `make test-integration` | 58 |
+| E2E (warm-start budget) | included in `make test-integration` | 1 |
+
+**142 tests total** across unit, integration, and e2e. The architecture
+fitness tests gate CI — any agent-side SQL, any audit-mutation route, or
+any emoji in committed text fails the build.
+
+## Conventions
+
+- **Python**: 3.12, `pdm`-managed, `ruff` + `mypy --strict` clean.
+- **Containers**: Docker Compose for the local stack; 512 MB memory limit
+  per long-running service.
+- **Code style**: no emojis (NFR-012; enforced by an architecture fitness
+  test). Short comments only where the *why* is non-obvious.
+- **Commits**: one phase per merge to `main`. CHANGELOG + FEATURES + TODO
+  updated with every merge. Lessons learned written into PLAN.md as
+  "Known pitfalls" so the next replay avoids them.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
+
+## Author
+
+Nick Baynham — [nickbaynham@gmail.com](mailto:nickbaynham@gmail.com).
+Portfolio piece for QA architect / test-automation roles. The full project
+narrative (concept → BRD → engineering handoff → 10-phase plan → 142
+tests) is intentional and reviewable.

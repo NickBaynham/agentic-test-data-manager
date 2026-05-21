@@ -559,7 +559,11 @@ pdm run pytest tests/architecture/ -v
 
 ## Phase 9 — `make demo`, README, design-decisions doc
 
-**Goal.** A reviewer can clone the repo, run `make demo`, and watch the full intent → seed → test → reset → audit flow complete in ≤ 90 seconds with no manual steps.
+> **STATUS: COMPLETE — 2026-05-21.** `make demo` runs the full intent → seed → test → reset → audit loop in **3 seconds** on a warm stack (90-second budget, 30× headroom). Five new docs: `demo-script.md`, `architecture.md` (mermaid diagrams), `healthcare-domain-model.md` (mermaid ERD + data dictionary), `recruiter-summary.md` (one page), plus a rewritten 219-line `README.md` that leads with the audit-trail screenshot. `docs/assets/audit-trail.png` captured live from the running UI via Playwright headless Chromium (`make audit-screenshot`). A2 acceptance verified.
+
+**Known pitfall (discovered in Phase 9):**
+
+- **Node ESM resolves modules from the script's directory, not the CWD.** First attempt placed `take_audit_screenshot.mjs` under `scripts/` with `cd automation/playwright && node ../../scripts/take_audit_screenshot.mjs` — Node failed to find `@playwright/test` because module resolution walks upward from the script's location, not the working directory. Resolution: move the script into `automation/playwright/` next to `node_modules/`. **General rule for Node scripts**: keep them in the same package they depend on, or use a bundler. The PYTHONPATH-style trick of "run from a directory that has the modules" doesn't work for ESM.
 
 **Inputs.** Phase 8 complete.
 
