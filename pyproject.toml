@@ -22,10 +22,13 @@ distribution = false
 
 [tool.pdm.dev-dependencies]
 dev = [
-    # PDM expands ${PROJECT_ROOT} at install time, so this resolves correctly
-    # on any machine including CI. (The pre-Phase-10 form was a hard-coded
-    # /Users/... path that only worked on the dev host — see CHANGELOG
-    # "Lessons learned" entry from 2026-05-21.)
+    # PDM's canonical form. ${PROJECT_ROOT} is documented at
+    # https://pdm-project.org/latest/usage/dependency/#path-dependencies
+    # and gets substituted at install time. The four-slash result on Linux
+    # (file:////home/runner/...) is what PDM emits internally; both pip
+    # and PDM's installer handle that fine — the earlier CI failure was
+    # actually from the host-absolute /Users/... path baked in by Phase 7,
+    # not from this form.
     "-e file:///${PROJECT_ROOT}/apps/test-data-agent/python#egg=atdm-client",
 ]
 [tool.ruff]
