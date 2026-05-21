@@ -5,6 +5,8 @@ top-level [README.md](../README.md).
 
 ## Prerequisites
 
+### Required to run the stack and the demo
+
 | Tool | Version |
 |---|---|
 | Python | 3.12 |
@@ -20,6 +22,19 @@ python3.12 --version
 pdm --version
 docker --version
 docker compose version
+```
+
+### Required only for the docs-generation workflow
+
+| Tool | Version | Used by |
+|---|---|---|
+| Node.js | 20+ | the example Playwright test under `automation/playwright/` and the `make audit-screenshot` PNG capture |
+| asciinema | latest | `make demo-cast` — captures `docs/assets/demo.cast` for the README. Without it, the demo still runs; you just can't regenerate the recording. |
+
+Install on macOS:
+
+```bash
+brew install node asciinema
 ```
 
 ## First-time setup

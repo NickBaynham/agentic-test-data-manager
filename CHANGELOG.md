@@ -4,6 +4,38 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-21 — Phase 10 hardening (MVP complete)
+
+The last phase. All Phase 10 deliverables and the project-wide Definition
+of Done are ticked.
+
+- **Docker images pinned by digest** in `infra/docker-compose.yml`. Postgres,
+  MinIO, MinIO mc, and `python:3.12-slim` all `@sha256:...`. Comment block
+  per service tells the next maintainer how to bump: `docker pull <tag> &&
+  docker inspect <tag> --format '{{index .RepoDigests 0}}'`.
+- **`make setup` now installs system tools** in addition to Python deps.
+  Detects brew on macOS and runs `brew install` for `node`, `asciinema`,
+  and `agg` if missing. Errors out cleanly when `docker` or `pdm` are not
+  on PATH. Non-brew systems get a friendly note. Split into `setup-tools`
+  and `setup-deps` so each can run alone.
+- **Pre-commit hooks** at `.pre-commit-config.yaml`. Trailing whitespace +
+  end-of-file fixer + YAML/TOML/merge-conflict checks + ruff lint + ruff
+  format + the project's architecture-fitness suite + a dedicated
+  no-emoji hook. Wired into `make pre-commit-install` and
+  `make pre-commit-run`.
+- **Asciinema demo cast** at `docs/assets/demo.cast`, exported to
+  `docs/assets/demo.gif` via `agg`. The GIF is embedded in the README so
+  reviewers see the demo in motion (not just the audit-trail PNG). The
+  `make demo-cast` target regenerates both.
+- **README updated** to call out asciinema and Node as required for the
+  docs-generation workflow. New Prerequisites table. Quickstart now
+  mentions `make setup` auto-installs missing brew tools.
+- **`docs/development.md` prerequisites section split** into "required to
+  run the stack" and "required for the docs-generation workflow". Install
+  command included.
+- **Project-wide Definition of Done audited** — all 16 items ticked in
+  PLAN.md Phase 10 with evidence per item. MVP is officially done.
+
 ### Added — 2026-05-21 — Phase 9 make demo, README final, design docs
 
 The polish phase. `make demo` runs the full intent → seed → test → reset →

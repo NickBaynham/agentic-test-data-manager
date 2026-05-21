@@ -7,12 +7,14 @@
 PDM ?= pdm
 COMPOSE ?= docker compose -f infra/docker-compose.yml
 
-.PHONY: help setup lint test test-unit test-integration build up down down-clean logs ps migrate demo smoke baseline-snapshot reset-baseline clean playwright-install playwright-test audit-screenshot
+.PHONY: help setup setup-tools setup-deps lint test test-unit test-integration build up down down-clean logs ps migrate demo demo-cast smoke baseline-snapshot reset-baseline clean playwright-install playwright-test audit-screenshot pre-commit-install pre-commit-run
 
 help:
 	@echo "Agentic Test Data Manager — Make targets"
 	@echo ""
-	@echo "  setup              Install Python deps via pdm."
+	@echo "  setup              Install everything (system tools + Python deps). One-stop entry point."
+	@echo "  setup-tools        System tools only (Docker check + brew installs of node/asciinema/agg)."
+	@echo "  setup-deps         pdm install only (Python deps)."
 	@echo "  lint               Run ruff and mypy --strict."
 	@echo "  test               Run unit tests (no Docker). Alias for test-unit."
 	@echo "  test-unit          Run unit tests per source root (no Docker required)."
@@ -25,13 +27,28 @@ help:
 	@echo "  ps                 Show stack status."
 	@echo "  migrate            Apply SQL migrations to the running Postgres (idempotent)."
 	@echo "  demo               Run the end-to-end intent-to-data demo. Phase 9 deliverable."
+	@echo "  demo-cast          Record 'make demo' as docs/assets/demo.cast via asciinema (+ gif via agg)."
 	@echo "  smoke              Quick round-trip smoke test exercising all five reset strategies."
 	@echo "  baseline-snapshot  Capture the Target SUT current state as a baseline."
 	@echo "  reset-baseline     Restore the Target SUT to the most recent baseline."
 	@echo "  clean              Remove caches and coverage artifacts."
 
-setup:
-	@echo "[setup] installing python deps via pdm"
+setup: setup-tools setup-deps
+
+setup-tools:
+	@echo "[setup-tools] checking system prerequisites"
+	@command -v docker >/dev/null 2>&1 || (echo "ERROR: Docker is required. Install Docker Desktop or colima."; exit 1)
+	@command -v pdm    >/dev/null 2>&1 || (echo "ERROR: pdm is required. Install with 'brew install pdm' or 'pipx install pdm'."; exit 1)
+	@if command -v brew >/dev/null 2>&1; then \
+	  command -v node       >/dev/null 2>&1 || (echo "[setup-tools] installing node via brew"       && brew install node); \
+	  command -v asciinema  >/dev/null 2>&1 || (echo "[setup-tools] installing asciinema via brew"  && brew install asciinema); \
+	  command -v agg        >/dev/null 2>&1 || (echo "[setup-tools] installing agg via brew (asciinema -> gif)" && brew install agg); \
+	else \
+	  echo "[setup-tools] note: brew not found. Install node + asciinema + agg manually if you want 'make audit-screenshot' or 'make demo-cast'."; \
+	fi
+
+setup-deps:
+	@echo "[setup-deps] installing python deps via pdm"
 	$(PDM) install
 
 lint:
@@ -96,8 +113,20 @@ migrate:
 	done
 
 demo: up
-	@echo "[demo] end-to-end intent-to-data demo (≤90s)"
+	@echo "[demo] end-to-end intent-to-data demo (<=90s)"
 	./scripts/demo.sh
+
+demo-cast: up
+	@echo "[demo-cast] record make demo as docs/assets/demo.cast (requires asciinema)"
+	@command -v asciinema >/dev/null 2>&1 || (echo "asciinema not installed. Run 'make setup' or 'brew install asciinema'."; exit 1)
+	mkdir -p docs/assets
+	asciinema rec docs/assets/demo.cast --overwrite --command "./scripts/demo.sh" --title "ATDM demo"
+	@if command -v agg >/dev/null 2>&1; then \
+	  echo "[demo-cast] generating docs/assets/demo.gif from cast"; \
+	  agg docs/assets/demo.cast docs/assets/demo.gif; \
+	else \
+	  echo "[demo-cast] agg not installed; skipping gif export (run 'make setup' or 'brew install agg')"; \
+	fi
 
 smoke:
 	@echo "[smoke] reset-strategy round-trip (Phase 5+ deliverable — not yet implemented)"
@@ -129,3 +158,11 @@ audit-screenshot:
 	@echo "[audit-screenshot] capture docs/assets/audit-trail.png (requires stack up + playwright-install)"
 	mkdir -p docs/assets
 	cd automation/playwright && node take_audit_screenshot.mjs
+
+pre-commit-install:
+	@echo "[pre-commit-install] installing git hooks (runs on every commit)"
+	$(PDM) run pre-commit install
+
+pre-commit-run:
+	@echo "[pre-commit-run] running all hooks against every file"
+	$(PDM) run pre-commit run --all-files

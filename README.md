@@ -31,16 +31,44 @@ scenario run from request through reset. Pico.css from a CDN, no
 JavaScript build. The full audit trail and its underlying Parquet schema
 are documented in [docs/design-decisions.md](docs/design-decisions.md).*
 
+## Prerequisites
+
+| Tool | Required for | Install |
+|---|---|---|
+| Python 3.12 | runtime | `brew install python@3.12` (or pyenv) |
+| pdm 2.26+ | package management | `brew install pdm` |
+| Docker Engine 24+ | local stack | Docker Desktop or `brew install docker` + colima |
+| Docker Compose v2 | service orchestration | bundled with Docker Desktop |
+| GNU Make | task runner | bundled with macOS / Linux toolchains |
+| Node.js 20+ | Playwright example, `make audit-screenshot` | `brew install node` |
+| asciinema | recording the demo (`make demo-cast`) | `brew install asciinema` |
+
+The first five are required to run `make demo`. Node, asciinema, and `agg`
+are only required for the Playwright example and for regenerating the
+screenshot / demo cast under `docs/assets/`.
+
+**On macOS, `make setup` handles the optional installs for you.** It
+checks for `docker` and `pdm` (errors out if missing), auto-installs
+`node`, `asciinema`, and `agg` via Homebrew if absent, then runs
+`pdm install`. On other systems, `make setup` skips the brew step and just
+runs `pdm install`; install the optional tools manually if you need them.
+
 ## Try it (90 seconds)
 
 ```bash
-make setup       # pdm install (~5s)
+make setup       # verify tools + brew install missing ones + pdm install
 make up          # docker compose, all services healthy (~18s p95)
 make demo        # full intent → seed → test → reset → audit loop (~3s)
 ```
 
 The demo prints a URL to open in a browser. See
 [docs/demo-script.md](docs/demo-script.md) for a step-by-step walkthrough.
+
+![make demo running end-to-end](docs/assets/demo.gif)
+
+*Above: `make demo` recorded with `make demo-cast`. The raw asciinema cast
+is at [docs/assets/demo.cast](docs/assets/demo.cast) — replay it with
+`asciinema play docs/assets/demo.cast`.*
 
 ## What `make demo` does
 

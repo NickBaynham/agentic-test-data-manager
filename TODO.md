@@ -2,11 +2,17 @@
 
 Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they land in `main` with green CI.
 
-## Next phase to start
+## Status
 
-**Phase 10 — Hardening, asciinema cast, project-wide Definition of Done.** See [planning/PLAN.md](planning/PLAN.md#phase-10--hardening-polish-and-merge-to-main).
+**MVP is complete (2026-05-21).** All 10 phases shipped. The project-wide
+Definition of Done is fully ticked in
+[planning/PLAN.md Phase 10](planning/PLAN.md#phase-10--hardening-polish-and-merge-to-main).
 
-## Open MVP work (Phases 1–10)
+Post-MVP work lives in the candidate sections below. See
+[requirements/BRD.md §18 Roadmap](requirements/BRD.md) for the strategic
+phasing.
+
+## Original MVP plan (all shipped)
 
 See [planning/PLAN.md](planning/PLAN.md) for the canonical phase list. Each phase has exit criteria and verification commands. Each phase ends in something that runs and is tested.
 

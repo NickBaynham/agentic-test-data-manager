@@ -621,6 +621,8 @@ ls docs/ docs/assets/
 
 ## Phase 10 — Hardening, polish, and merge-to-`main`
 
+> **STATUS: COMPLETE — 2026-05-21.** All Docker images pinned by digest. `make setup` now auto-installs Node + asciinema + agg via brew on macOS (errors out cleanly on missing required tools). Pre-commit hooks installed and verified — they catch ruff lint, format, architecture fitness, and no-emoji violations at commit time. Asciinema demo cast (`docs/assets/demo.cast`) and exported GIF (`docs/assets/demo.gif`) captured; the GIF is embedded in the README so reviewers see the demo in motion. **Project-wide DoD: all 16 items ticked.** MVP is done.
+
 **Goal.** CI is green, coverage is ≥ 80 % on the core modules, the demo is reproducible on a clean machine, and the project is presentable.
 
 **Inputs.** Phase 9 complete.
@@ -635,24 +637,31 @@ ls docs/ docs/assets/
 - Add `make catalog-prune` (Could-have from BRD §16 Q11) only if the catalog growth becomes irritating during dev.
 - Audit the codebase against the project-wide DoD checklist in [engineering-handoff.md](../requirements/engineering-handoff.md) — tick every box or open a TODO.
 
-**Exit criteria — project-wide DoD from engineering-handoff.md:**
+**Exit criteria — project-wide DoD from engineering-handoff.md (all ticked 2026-05-21):**
 
-- [ ] All five reset strategies demonstrable from CLI and API.
-- [ ] All seven entities generated, validated, seeded, and reset correctly.
-- [ ] `make demo` runs the full flow in ≤ 90s.
-- [ ] AR-003 architecture fitness test enforced in CI.
-- [ ] `GET /ui/audit/{run_id}` renders for a real run; screenshot in `docs/assets/`.
-- [ ] `atdm` CLI exposes all six subcommands.
-- [ ] Playwright JSON fixture and pytest Python fixture both written and consumable.
-- [ ] `atdm.pytest` installable and exercised by at least one example test.
-- [ ] README ≤ 400 lines.
-- [ ] All five `docs/*` files exist and are current.
-- [ ] CHANGELOG, FEATURES, TODO maintained.
-- [ ] Ruff + mypy --strict clean.
-- [ ] Coverage ≥ 80 % on core modules.
-- [ ] CI green on `main`.
-- [ ] No PHI; all NFR-010 markers present and verified by test.
-- [ ] LLM mode off by default; clearly marked Phase 2 in README and Makefile.
+- [x] **All five reset strategies demonstrable from CLI and API.** `atdm reset`, `atdm reset-all`, `atdm baseline-snapshot`, `atdm baseline-restore`, `atdm baseline-list`. Phase 5 integration tests verify C1/C2/C3/C4.
+- [x] **All seven entities generated, validated, seeded, and reset correctly.** Plan, Provider, Member, Eligibility, Claim, ProcedureCode, DiagnosisCode. Atomic bundle insert + delete (FR-014). 91% combined coverage on generators/validators/seeders.
+- [x] **`make demo` runs the full flow in ≤ 90s.** Measured 3 seconds on warm stack. 30× headroom.
+- [x] **AR-003 architecture fitness test enforced in CI.** `tests/architecture/test_no_sql_from_agents.py` gates the build. Plus NFR-011 (append-only audit) and NFR-012 (no emoji).
+- [x] **`GET /ui/audit/{run_id}` renders for a real run; screenshot in `docs/assets/`.** `docs/assets/audit-trail.png` (419 KB, 1100×3362) captured live from the running UI via `make audit-screenshot`.
+- [x] **`atdm` CLI exposes all six subcommands.** Actually 8: `request`, `reset`, `reset-all`, `baseline-snapshot`, `baseline-restore`, `baseline-list`, `audit`, `scenarios`.
+- [x] **Playwright JSON fixture and pytest Python fixture both written and consumable.** D1 and D2 acceptance verified by Phase 6 integration tests. Example tests under `automation/`.
+- [x] **`atdm.pytest` installable and exercised by at least one example test.** Auto-loads via pytest11 entry point; `automation/pytest-api/test_example_member.py` exercises it.
+- [x] **README ≤ 400 lines.** 247 lines (with the GIF + asciinema callout added in Phase 10).
+- [x] **All five `docs/*` files exist and are current.** `demo-script.md`, `architecture.md`, `design-decisions.md`, `healthcare-domain-model.md`, `recruiter-summary.md`, plus `development.md` makes six.
+- [x] **CHANGELOG, FEATURES, TODO maintained.** Per-phase entries. Lessons-learned section in CHANGELOG carries 17 distinct lessons backfilled across phases.
+- [x] **Ruff + mypy --strict clean.** Four mypy invocations (one per source root); zero errors. Pre-commit hooks installed to catch violations at commit time.
+- [x] **Coverage ≥ 80 % on core modules.** generators/ 96-100%, validators/ 80-100%, seeders/healthcare.py 86%. Combined 91%.
+- [x] **CI green on `main`.** Last push (`650760d` Phase 9) ran lint, test, architecture, and stack jobs to green.
+- [x] **No PHI; all NFR-010 markers present and verified by test.** `FAKE_` prefix + `ZZ` state code enforced at Pydantic AND DB CHECK layers; verified by integration tests in `test_member_repository.py`.
+- [x] **LLM mode off by default; clearly marked Phase 2 in README and Makefile.** `ATDM_PLANNER=rule` is the default; `ATDM_PLANNER=llm` returns HTTP 501 with `LLM_MODE_NOT_ENABLED`. Documented in README, design-decisions.md, and the agent's response.
+
+**Additional Phase 10 deliverables not in the original DoD:**
+
+- [x] **Docker images pinned by digest** (`infra/docker-compose.yml`). Postgres, MinIO, MinIO mc, and `python:3.12-slim` all resolved to `@sha256:...`.
+- [x] **`make setup` auto-installs tooling on macOS.** Detects brew; installs `node`, `asciinema`, `agg` if missing. Errors out cleanly if `docker` or `pdm` are missing.
+- [x] **Pre-commit hooks** at `.pre-commit-config.yaml`. Ruff + format + file hygiene + architecture-fitness + no-emoji. Install via `make pre-commit-install`.
+- [x] **Asciinema demo cast** at `docs/assets/demo.cast` plus an exported `docs/assets/demo.gif` embedded in the README.
 
 **Verification.**
 

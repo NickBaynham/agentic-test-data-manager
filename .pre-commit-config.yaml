@@ -1,0 +1,53 @@
+# Pre-commit hooks for ATDM (Phase 10).
+#
+# Install once:
+#   pdm run pre-commit install
+# Run manually on all files:
+#   pdm run pre-commit run --all-files
+#
+# The hooks mirror what `make lint` and the architecture fitness tests check —
+# catching violations at commit time so you don't push a red CI build.
+
+repos:
+  # File hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  # Ruff (lint + format) — same versions as project dev deps.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Architecture fitness tests — runs only the tests in tests/architecture/.
+  # Fast enough for every commit (<100ms) and catches AR-003 / NFR-011 /
+  # NFR-012 violations before they hit CI.
+  - repo: local
+    hooks:
+      - id: architecture-fitness
+        name: architecture fitness tests
+        entry: pdm run pytest tests/architecture --no-header --quiet
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-commit]
+
+      - id: no-emoji-scan
+        name: no emoji in committed text
+        entry: pdm run pytest tests/architecture/test_no_emoji.py --no-header --quiet
+        language: system
+        pass_filenames: false
+        # Run on every commit regardless of language because Markdown / YAML
+        # changes are the most common place emojis slip in.
+        types_or: [python, markdown, yaml, toml, html, javascript, ts]
+        stages: [pre-commit]

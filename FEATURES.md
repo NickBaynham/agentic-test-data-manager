@@ -14,6 +14,15 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 10 — Hardening (MVP complete, 2026-05-21)
+
+- All Docker images pinned by `@sha256:...` digest in `infra/docker-compose.yml`.
+- `make setup` auto-installs `node`, `asciinema`, and `agg` via Homebrew on macOS.
+- Pre-commit hooks at `.pre-commit-config.yaml` enforce ruff + architecture fitness + no-emoji at commit time.
+- Asciinema demo cast + exported GIF under `docs/assets/`. README embeds the GIF.
+- Project-wide Definition of Done audited; all 16 items ticked.
+- **MVP is officially complete.**
+
 ### Phase 9 — make demo, README final, design docs (2026-05-21)
 
 - `make demo` runs the full intent → seed → test → reset → audit loop in **3 seconds** on a warm stack (90s budget).
@@ -96,8 +105,8 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - GitHub Actions `stack` job runs the integration suite on every push.
 - Comprehensive developer guide at `docs/development.md`.
 
-## Planned by phase
+## Planned (post-MVP)
 
-See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
-
-- **Phase 10.** Hardening, asciinema cast, project-wide Definition of Done complete.
+All 10 MVP phases are complete. Future enhancements are tracked in
+[TODO.md](TODO.md) and scoped in
+[requirements/BRD.md §18 Roadmap](requirements/BRD.md).
