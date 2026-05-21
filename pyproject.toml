@@ -22,7 +22,11 @@ distribution = false
 
 [tool.pdm.dev-dependencies]
 dev = [
-    "-e file:////Users/nbaynham/projects/agentic-test-data-manager/apps/test-data-agent/python#egg=atdm-client",
+    # PDM expands ${PROJECT_ROOT} at install time, so this resolves correctly
+    # on any machine including CI. (The pre-Phase-10 form was a hard-coded
+    # /Users/... path that only worked on the dev host — see CHANGELOG
+    # "Lessons learned" entry from 2026-05-21.)
+    "-e file:///${PROJECT_ROOT}/apps/test-data-agent/python#egg=atdm-client",
 ]
 [tool.ruff]
 line-length = 100
