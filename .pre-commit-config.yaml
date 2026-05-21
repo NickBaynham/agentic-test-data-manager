@@ -51,3 +51,16 @@ repos:
         # changes are the most common place emojis slip in.
         types_or: [python, markdown, yaml, toml, html, javascript, ts]
         stages: [pre-commit]
+
+      - id: pdm-lock-fresh
+        name: pdm.lock content_hash matches pyproject.toml
+        # If a commit changes pyproject.toml but didn't refresh pdm.lock,
+        # CI's `pdm install` re-resolves from pyproject.toml on a Linux
+        # runner and silently breaks. See CHANGELOG 2026-05-21 "pdm.lock
+        # content_hash gets stale" for the full story. Catch it here
+        # instead of after the push.
+        entry: pdm lock --check
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|pdm\.lock)$
+        stages: [pre-commit]

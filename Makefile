@@ -7,7 +7,7 @@
 PDM ?= pdm
 COMPOSE ?= docker compose -f infra/docker-compose.yml
 
-.PHONY: help setup setup-tools setup-deps lint test test-unit test-integration build up down down-clean logs ps migrate demo demo-cast smoke baseline-snapshot reset-baseline clean playwright-install playwright-test audit-screenshot pre-commit-install pre-commit-run
+.PHONY: help setup setup-tools setup-deps lint test test-unit test-integration build up down down-clean logs ps migrate demo demo-cast smoke baseline-snapshot reset-baseline clean playwright-install playwright-test audit-screenshot pre-commit-install pre-commit-run ci-status
 
 help:
 	@echo "Agentic Test Data Manager — Make targets"
@@ -32,6 +32,9 @@ help:
 	@echo "  baseline-snapshot  Capture the Target SUT current state as a baseline."
 	@echo "  reset-baseline     Restore the Target SUT to the most recent baseline."
 	@echo "  clean              Remove caches and coverage artifacts."
+	@echo "  pre-commit-install Install git hooks defined in .pre-commit-config.yaml."
+	@echo "  pre-commit-run     Run all pre-commit hooks across every file."
+	@echo "  ci-status          Live GitHub check-runs status for HEAD (don't trust the badge alone)."
 
 setup: setup-tools setup-deps
 
@@ -166,3 +169,12 @@ pre-commit-install:
 pre-commit-run:
 	@echo "[pre-commit-run] running all hooks against every file"
 	$(PDM) run pre-commit run --all-files
+
+ci-status:
+	@echo "[ci-status] live check-runs for HEAD (queries GitHub API, not the cached badge)"
+	@SHA=$$(git rev-parse HEAD); \
+	REPO=$$(git config --get remote.origin.url | sed -E 's|.*[:/]([^/]+/[^/]+)\.git$$|\1|'); \
+	echo "  commit: $$SHA"; \
+	echo "  repo:   $$REPO"; \
+	curl -fsSL "https://api.github.com/repos/$$REPO/commits/$$SHA/check-runs" | \
+	  python3 -c "import json, sys; d = json.load(sys.stdin); runs = d.get('check_runs', []); print('  no runs found' if not runs else ''); [print(f\"  {r['name']:<32} {r['status']:<12} {r.get('conclusion') or '-'}\") for r in runs]; sys.exit(0 if all(r.get('conclusion') == 'success' for r in runs) else 1)"
