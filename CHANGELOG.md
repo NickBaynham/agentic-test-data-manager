@@ -4,6 +4,22 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-20 — Phase 8 audit HTML page + architecture fitness tests in CI
+
+The portfolio differentiator phase. Two big deliverables: a browser-readable
+audit trail UI, and three architecture fitness tests that gate the build.
+
+- **`GET /ui/audit/{run_id}`** — server-rendered HTML page. Pico.css from CDN, no JavaScript build step. Sections: banner (run_id, invoker, status), plan (generators + validators), validator decisions (pass/fail per validator), records-created table, fixtures-emitted list, reset-status badge, chronological event timeline with collapsible per-event details. Page weighs ~11 KB; 100 KB hard ceiling enforced by integration test.
+- **`GET /ui/audit/<unknown>`** renders a friendly 404 page pointing at the JSON endpoint.
+- **AR-003 fitness test** (`tests/architecture/test_no_sql_from_agents.py`). Greps `apps/test-data-agent/app/` for forbidden imports (psycopg, asyncpg, sqlalchemy, sqlmodel, aiopg, databases) AND for SQL-shaped string literals (INSERT/DELETE/UPDATE/TRUNCATE). Any agent-side SQL fails the build. The "tool-bounded agent" claim is now mechanically enforceable, not just documentation.
+- **NFR-011 fitness test** (`tests/architecture/test_audit_log_append_only.py`). No DELETE/PUT/PATCH route under `/audit/*`. No function named like a mutation (`delete_event`, `update_event`, etc.) in the audit module.
+- **NFR-012 fitness test** (`tests/architecture/test_no_emoji.py`). Scans every committed `.py`/`.md`/`.yaml`/`.toml`/`.html`/`.ts`/`.json` file (excluding `.venv`, `node_modules`, etc.) for emoji code points. Catches accidental emoji introduction. Per project CLAUDE.md.
+- **CI architecture job** — removed the Phase 0 `|| exit 0` passthrough. The job now fails the build on any architecture violation.
+- **Audit metrics** (`apps/test-data-agent/app/audit/metrics.py`): `atdm_audit_events_total{action, status}` counter, `atdm_audit_write_latency_seconds` histogram, `atdm_audit_dropped_events_total` counter (must remain 0). Exposed at `/metrics`. The audit writer instruments every append with these.
+- **`docs/design-decisions.md`** — 7 ADR-style entries plus a fully worked-out example audit record for the rule-based path, the validator-rejection path, and a Phase 2 placeholder for the LLM path.
+- **6 new integration tests** under `tests/integration/test_phase8_audit_ui.py` covering E3 acceptance: HTML renders for known run, 404 for unknown, ≤ 100 KB, no auth required, rejected-validator path renders correctly, metrics include the new counters with zero drops.
+- **Deps**: `jinja2` and `prometheus-client` added to both agent runtime requirements.txt and project dev deps.
+
 ### Added — 2026-05-20 — Phase 7 `atdm` CLI and `atdm.pytest` library
 
 - New installable package `atdm-client` under `apps/test-data-agent/python/` with its own `pyproject.toml`. Installs via `pip install -e ./apps/test-data-agent/python` or as a path dep via pdm.

@@ -106,4 +106,6 @@ dev = [
     "pyyaml>=6.0",
     "types-PyYAML>=6.0.12.20260518",
     "typer<1,>=0.12",
+    "jinja2>=3.1",
+    "prometheus-client>=0.20",
 ]

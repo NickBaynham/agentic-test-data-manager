@@ -259,6 +259,52 @@ curl -fsS -X POST "http://localhost:18001/test-data/runs/$RUN/reset" \
 | `out_of_network_pending_claim` | Active member, out-of-network provider, claim pending review. |
 | `inactive_member_with_history` | Inactive member with historical paid claim (soft-delete semantics). |
 
+### Audit UI (Phase 8)
+
+Every scenario request produces a Parquet audit trail at
+`s3://atdm-audit/runs/<run_id>.parquet`. Two read surfaces:
+
+- **JSON**: `GET /audit/runs/<run_id>` — for programs.
+- **HTML**: `GET /ui/audit/<run_id>` — for humans. Server-rendered (no
+  JavaScript build step), styled with Pico.css from a CDN. Page is
+  ≤ 100 KB.
+
+Open in a browser after the demo:
+```
+open http://localhost:18001/ui/audit/<run_id>
+```
+
+The page shows: a banner with run_id/invoker/status, the planner steps,
+each validator's decision, the records created, fixtures emitted (paths),
+the reset status badge, and a chronological event timeline.
+
+A worked example of the underlying JSON (plus the rejected-plan variant
+and a Phase 2 LLM placeholder) lives in
+[design-decisions.md](design-decisions.md#worked-example-a-complete-audit-trail-rule-based-planner).
+
+### Architecture fitness tests (Phase 8 — gates CI)
+
+Three tests live under `tests/architecture/`:
+
+| Test | Asserts |
+|---|---|
+| `test_no_sql_from_agents.py` | AR-003 — agent code never imports psycopg / asyncpg / sqlalchemy / sqlmodel, and never contains SQL-shaped literals. |
+| `test_audit_log_append_only.py` | NFR-011 — no DELETE/PUT/PATCH route under `/audit/*`, no `delete_event` / `update_event` style functions. |
+| `test_no_emoji.py` | NFR-012 — no emoji code points in any committed source / Markdown / YAML / TOML / HTML / TypeScript file. |
+
+Run locally via `make test` (architecture suite is part of `test-unit`).
+The CI `architecture` job fails the build on any violation.
+
+### Audit metrics (Phase 8)
+
+`GET /metrics` emits Prometheus text exposition including:
+
+- `atdm_up{}` — the heartbeat (Phase 1).
+- `atdm_audit_events_total{action, status}` — one increment per audit append.
+- `atdm_audit_write_latency_seconds{}` — histogram per audit append.
+- `atdm_audit_dropped_events_total` — must remain 0; non-zero means an
+  audit write failed durability and the integration test fails.
+
 ### CLI and pytest plugin (Phase 7)
 
 The `atdm` CLI is installed automatically via the editable `atdm-client`

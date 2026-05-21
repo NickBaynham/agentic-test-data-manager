@@ -2,11 +2,17 @@
 
 One Parquet object per run at `minio://atdm-audit/runs/{run_id}.parquet`.
 Append semantics: each new event triggers a read-modify-write of the file.
-This is acceptable for Phase 3 scale (a handful of events per run); Phase 8
-will introduce daily-partitioned append-only files if write volume warrants.
+This is acceptable for Phase 3 scale (a handful of events per run); Phase 9+
+can introduce daily-partitioned append-only files if write volume warrants.
 
 Append-only at the API layer (NFR-011): there is no public mutation surface
 for past events. The audit endpoint is read-only.
+
+Phase 8 observability: every successful append increments
+`atdm_audit_events_total{action, status}` and observes
+`atdm_audit_write_latency_seconds`. A failed append increments
+`atdm_audit_dropped_events_total` (must remain 0 — the architecture
+fitness test asserts this).
 """
 
 from __future__ import annotations
@@ -14,6 +20,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import time
 import uuid
 from datetime import datetime
 from typing import Any
@@ -22,6 +29,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from minio import Minio
 from minio.error import S3Error
+
+from app.audit import metrics as audit_metrics
 
 AUDIT_BUCKET = os.environ.get("MINIO_BUCKET_AUDIT", "atdm-audit")
 
@@ -93,24 +102,42 @@ def append_event(
     status: str = "ok",
     reviewer_decision: str | None = None,
 ) -> None:
-    """Append one audit event to the run's Parquet object. Read-modify-write."""
-    existing = _read_existing(client, test_run_id)
-    existing.append(
-        {
-            "event_id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow(),
-            "test_run_id": test_run_id,
-            "invoker": invoker,
-            "action": action,
-            "inputs": _json(inputs or {}),
-            "tools_called": _json(tools_called or []),
-            "outputs": _json(outputs or {}),
-            "status": status,
-            "reviewer_decision": reviewer_decision or "",
-            "schema_version": 1,
-        }
-    )
-    _write_all(client, test_run_id, existing)
+    """Append one audit event to the run's Parquet object. Read-modify-write.
+
+    On success, emits `atdm_audit_events_total{action, status}` +1 and
+    observes write latency. On failure, increments
+    `atdm_audit_dropped_events_total` and re-raises — the caller decides
+    whether a missing audit event is recoverable (in practice, callers
+    propagate the exception).
+    """
+    started_at = time.monotonic()
+    try:
+        existing = _read_existing(client, test_run_id)
+        existing.append(
+            {
+                "event_id": str(uuid.uuid4()),
+                "timestamp": datetime.utcnow(),
+                "test_run_id": test_run_id,
+                "invoker": invoker,
+                "action": action,
+                "inputs": _json(inputs or {}),
+                "tools_called": _json(tools_called or []),
+                "outputs": _json(outputs or {}),
+                "status": status,
+                "reviewer_decision": reviewer_decision or "",
+                "schema_version": 1,
+            }
+        )
+        _write_all(client, test_run_id, existing)
+    except Exception:
+        audit_metrics.record_event_dropped()
+        raise
+    else:
+        audit_metrics.record_event_written(
+            action=action,
+            status=status,
+            latency_seconds=time.monotonic() - started_at,
+        )
 
 
 def read_events(client: Minio, test_run_id: str) -> list[dict[str, Any]]:

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ATDM audit · not found</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+<main class="container" style="max-width:640px; padding-top:3rem;">
+  <hgroup>
+    <h1>Run not found</h1>
+    <h2 style="margin-top:0;">No audit trail for <code>{{ run_id }}</code>.</h2>
+  </hgroup>
+  <p>This run_id has no events in <code>s3://atdm-audit/runs/{{ run_id }}.parquet</code>.</p>
+  <p>If you expected this run to exist, check the JSON endpoint at
+     <code><a href="/audit/runs/{{ run_id }}">/audit/runs/{{ run_id }}</a></code>.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ATDM audit · {{ run_id }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <style>
+    main { max-width: 920px; }
+    .badge { display: inline-block; padding: .15rem .55rem; border-radius: .25rem; font-size: .85rem; font-weight: 600; }
+    .badge-ok      { background:#1b8e3b; color:#fff; }
+    .badge-failed  { background:#b53b3b; color:#fff; }
+    .badge-pending { background:#7a7a7a; color:#fff; }
+    .badge-rejected{ background:#b53b3b; color:#fff; }
+    .badge-cleaned { background:#1b8e3b; color:#fff; }
+    .badge-ready   { background:#1b8e3b; color:#fff; }
+    .badge-rolledback { background:#b53b3b; color:#fff; }
+    .grid-card { border: 1px solid var(--pico-muted-border-color); border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; }
+    .kv-row { display: grid; grid-template-columns: 11rem 1fr; gap: .25rem; margin-bottom: .15rem; }
+    .kv-row > strong { color: var(--pico-muted-color); }
+    .timeline { position: relative; padding-left: 1.5rem; border-left: 2px solid var(--pico-muted-border-color); }
+    .timeline-event { position: relative; padding-bottom: .75rem; }
+    .timeline-event::before {
+      content: ""; position: absolute; left: -1.85rem; top: .4rem;
+      width: .7rem; height: .7rem; border-radius: 50%;
+      background: var(--pico-primary);
+    }
+    .timeline-event.failed::before { background: #b53b3b; }
+    .timeline-event.rejected::before { background: #b53b3b; }
+    .timeline-time { color: var(--pico-muted-color); font-size: .85rem; }
+    table { font-size: .9rem; }
+    th { text-align: left; }
+    details > summary { cursor: pointer; }
+    pre { background: var(--pico-code-background-color); padding: .75rem; border-radius: .25rem; overflow-x: auto; font-size: .8rem; }
+    .source-link { font-family: monospace; font-size: .8rem; color: var(--pico-muted-color); }
+  </style>
+</head>
+<body>
+<main class="container">
+
+  <header>
+    <hgroup>
+      <h1>Audit trail</h1>
+      <h2 style="margin-top:0;"><code>{{ run_id }}</code></h2>
+    </hgroup>
+  </header>
+
+  <article class="grid-card">
+    <div class="kv-row"><strong>Scenario</strong><span>{{ scenario_id or "(unknown)" }}</span></div>
+    <div class="kv-row"><strong>Invoker</strong><span><code>{{ invoker or "(unknown)" }}</code></span></div>
+    <div class="kv-row"><strong>Planner mode</strong><span>{{ planner_mode or "rule" }}</span></div>
+    <div class="kv-row"><strong>Status</strong>
+      <span>
+        {% set status_class = "badge-" + (reset_status or "pending") | replace("_", "") %}
+        <span class="badge {{ status_class }}">{{ reset_status or "pending" }}</span>
+      </span>
+    </div>
+    <div class="kv-row"><strong>Started</strong><span class="source-link">{{ started_at or "?" }}</span></div>
+    <div class="kv-row"><strong>Finished</strong><span class="source-link">{{ finished_at or "?" }}</span></div>
+    <div class="kv-row"><strong>Source</strong><span class="source-link">s3://atdm-audit/runs/{{ run_id }}.parquet</span></div>
+  </article>
+
+  {% if plan_steps %}
+  <article class="grid-card">
+    <h3>Plan</h3>
+    <p>Generators (in order):</p>
+    <ol>
+      {% for step in plan_steps %}
+        <li><code>{{ step }}</code></li>
+      {% endfor %}
+    </ol>
+    {% if validators %}
+    <p>Validators:</p>
+    <ul>
+      {% for v in validators %}
+        <li><code>{{ v }}</code></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+  {% endif %}
+
+  {% if validator_decisions %}
+  <article class="grid-card">
+    <h3>Validator decisions</h3>
+    <table>
+      <thead><tr><th>Validator</th><th>Outcome</th><th>Message</th></tr></thead>
+      <tbody>
+      {% for v in validator_decisions %}
+        <tr>
+          <td><code>{{ v.validator }}</code></td>
+          <td><span class="badge badge-{{ "ok" if v.ok else "failed" }}">{{ "ok" if v.ok else "failed" }}</span></td>
+          <td>{{ v.message or "" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </article>
+  {% endif %}
+
+  {% if records_created %}
+  <article class="grid-card">
+    <h3>Records created</h3>
+    <table>
+      <thead><tr><th>Kind</th><th>Primary key</th></tr></thead>
+      <tbody>
+      {% for r in records_created %}
+        <tr><td>{{ r.kind }}</td><td><code>{{ r.primary_key }}</code></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </article>
+  {% endif %}
+
+  {% if fixtures %}
+  <article class="grid-card">
+    <h3>Fixtures emitted</h3>
+    <ul>
+      {% for kind, path in fixtures.items() %}
+        {% if path %}<li><strong>{{ kind }}</strong>: <code>{{ path }}</code></li>{% endif %}
+      {% endfor %}
+    </ul>
+  </article>
+  {% endif %}
+
+  <article class="grid-card">
+    <h3>Timeline</h3>
+    <div class="timeline">
+    {% for ev in events %}
+      <div class="timeline-event {% if ev.status in ('failed','rejected','rolled_back') %}{{ ev.status }}{% endif %}">
+        <div>
+          <strong>{{ ev.action }}</strong>
+          {% if ev.status and ev.status != "ok" %}
+            <span class="badge badge-{{ ev.status | replace('_', '') }}">{{ ev.status }}</span>
+          {% endif %}
+        </div>
+        <div class="timeline-time">{{ ev.timestamp }}</div>
+        {% if ev.outputs or ev.inputs %}
+        <details>
+          <summary>details</summary>
+          {% if ev.inputs %}<pre>inputs: {{ ev.inputs | tojson(indent=2) }}</pre>{% endif %}
+          {% if ev.outputs %}<pre>outputs: {{ ev.outputs | tojson(indent=2) }}</pre>{% endif %}
+        </details>
+        {% endif %}
+      </div>
+    {% endfor %}
+    </div>
+  </article>
+
+  <footer style="margin-top:2rem; color:var(--pico-muted-color); font-size:.85rem;">
+    Audit page generated by ATDM. JSON: <a href="/audit/runs/{{ run_id }}"><code>GET /audit/runs/{{ run_id }}</code></a>.
+  </footer>
+</main>
+</body>
+</html>

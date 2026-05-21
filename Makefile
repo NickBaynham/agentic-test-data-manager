@@ -51,8 +51,10 @@ lint:
 test: test-unit
 
 test-unit:
-	@echo "[test-unit] root tests (excluding integration / e2e)"
-	$(PDM) run pytest tests -m "not integration and not e2e"
+	@echo "[test-unit] root tests (excluding integration / e2e / architecture)"
+	$(PDM) run pytest tests -m "not integration and not e2e" --ignore=tests/architecture
+	@echo "[test-unit] architecture fitness tests"
+	$(PDM) run pytest tests/architecture
 	@echo "[test-unit] target-healthcare-api"
 	PYTHONPATH=apps/target-healthcare-api $(PDM) run pytest apps/target-healthcare-api/tests
 	@echo "[test-unit] test-data-agent"

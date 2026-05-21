@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 8 — Audit HTML page and architecture fitness test.** See [planning/PLAN.md](planning/PLAN.md#phase-8--audit-html-page-and-architecture-fitness-test).
+**Phase 9 — `make demo`, README final, design-decisions doc.** See [planning/PLAN.md](planning/PLAN.md#phase-9--make-demo-readme-design-decisions-doc).
 
 ## Open MVP work (Phases 1–10)
 

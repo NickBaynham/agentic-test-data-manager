@@ -509,6 +509,12 @@ cd automation/playwright && npx playwright test
 
 ## Phase 8 — Audit HTML page and architecture fitness test
 
+> **STATUS: COMPLETE — 2026-05-20.** `GET /ui/audit/{run_id}` renders a Pico.css-styled HTML page at ~11 KB (100 KB ceiling). 404 page for unknown runs. Three architecture fitness tests now gate CI: AR-003 (no SQL from agent), NFR-011 (audit append-only), NFR-012 (no emoji). The CI architecture job no longer passes through — any violation fails the build. Audit writer instrumented with three Prometheus metrics (events / latency / dropped); /metrics exposes them alongside the heartbeat. `docs/design-decisions.md` records 7 ADRs plus a worked-example audit record for the rule-based path, the validator-rejection path, and a Phase 2 LLM placeholder.
+
+**Known pitfall (discovered in Phase 8):**
+
+- **A 100 KB HTML budget is generous when you load CSS from a CDN.** The rendered audit page weighs ~11 KB because Pico.css is loaded via `<link>`, not inlined. If Phase 9 considers inlining CSS for offline-friendliness, the budget will need to grow to ~75 KB (Pico.min.css alone is ~60 KB). For now, the CDN dependency is fine — local stack runs are online by definition, and the alternative (vendoring or inlining) trades 60 KB for one less network dep that doesn't matter for a portfolio demo.
+
 **Goal.** `GET /ui/audit/{run_id}` renders a server-side HTML page that a reviewer reads in a browser; AR-003 architectural fitness test runs in CI and would fail any future refactor that lets an agent write SQL.
 
 This is the **single most important phase for portfolio impact**, per BRD §14 R1 and §17 strategic note. Spend the time.

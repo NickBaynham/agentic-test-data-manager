@@ -14,6 +14,13 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 8 — Audit HTML page and architecture fitness tests (2026-05-20)
+
+- `GET /ui/audit/{run_id}` — server-rendered HTML page with Pico.css. Reviewer can click through any run's trail in a browser. ~11 KB; 100 KB ceiling.
+- 3 architecture fitness tests gate CI: AR-003 (no SQL from agent code), NFR-011 (audit append-only), NFR-012 (no emoji in committed text).
+- Prometheus metrics on the audit writer: `atdm_audit_events_total{action,status}`, `atdm_audit_write_latency_seconds`, `atdm_audit_dropped_events_total` (must remain 0).
+- `docs/design-decisions.md` records 7 architectural calls plus a worked-example audit record for both the rule-based and the (Phase 2) LLM-mode planners.
+
 ### Phase 7 — `atdm` CLI and `atdm.pytest` library (2026-05-20)
 
 - Installable `atdm-client` package with PEP 561 `py.typed` marker.
@@ -85,6 +92,5 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 8.** Audit HTML page + AR-003 architecture fitness test in CI.
 - **Phase 9.** `make demo`, README final, design-decisions doc.
 - **Phase 10.** Hardening, asciinema cast, project-wide Definition of Done complete.

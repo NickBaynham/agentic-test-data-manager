@@ -7,3 +7,6 @@ python-ulid>=3
 pyarrow>=18,<21
 minio>=7.2
 pyyaml>=6.0
+# Phase 8: server-rendered audit UI + Prometheus metrics.
+jinja2>=3.1
+prometheus-client>=0.20
