@@ -380,9 +380,21 @@ pdm run pytest apps/test-data-agent/tests/ -k "scenario or validator or generato
 
 ## Phase 5 — Full reset surface
 
-**Goal.** All five reset strategies (`reset_run`, `reset_all`, `baseline_snapshot`, `baseline_restore`, `idempotent_seed`) are implemented and demoable from API and CLI.
+> **STATUS: COMPLETE — 2026-05-20.** All five reset strategies live and demoable from the ATDM agent's HTTP API. C1 still passes; C2 (snapshot/restore round-trip + idempotency), C3 (`reset_all` clears tagged-only), and C4 (idempotent_seed) all pass against the live stack with deterministic SHA-256 row-hash verification. `X-Confirm: yes` gate enforced (428 without). Snapshot/restore is schema-agnostic Parquet round-trip via PyArrow + MinIO. **90 tests passing across unit, integration, and e2e (47 unit + 43 integration).**
 
 **Inputs.** Phase 4 complete.
+
+**Known pitfalls (discovered in Phase 5):**
+
+1. **Snapshot/restore belongs server-side, not in the agent.** PLAN.md originally placed `snapshotter.py` under `apps/test-data-agent/`. But the SUT owns the schema and the rows, and AR-003 forbids the agent from running raw SQL. Moving snapshot/restore into the SUT (`apps/target-healthcare-api/app/reset/snapshotter.py`) cleanly inverts the layering — the SUT does the data work, the agent orchestrates and writes audit events. **General rule**: a service that owns the data also owns the snapshot of that data.
+
+2. **`TRUNCATE ... CASCADE` is the right tool for restore.** Doing `DELETE FROM table WHERE 1=1` per table in FK order works but requires careful ordering. `TRUNCATE table1, table2, ... CASCADE` truncates everything in one statement, ignoring FK constraints. Restore then re-inserts in FK order from Parquet. Two SQL statements, total. TRUNCATE inside a `BEGIN ... COMMIT` is transactional in Postgres — rollback works.
+
+3. **Schema-agnostic Parquet round-trip — `SELECT *` is the right primitive.** Avoid hard-coding column lists in snapshot/restore. `SELECT *` plus `INSERT INTO table (cols...) VALUES (...)` derived from the Parquet's columns means Phase 6+ schema changes don't touch snapshot/restore. Dynamic SQL is acceptable inside the SUT (AR-003 forbids it only in agent code).
+
+4. **Strategy invocations need their own audit run IDs.** `reset_all` and the baseline endpoints don't have a scenario `test_run_id` — but the audit trail still needs to record them. Resolution: synthetic `strategy-{name}-{ULID}` run IDs. They show up in `GET /audit/runs/{id}` like any scenario run. **General rule**: every action that mutates state earns an audit run_id, even if it isn't scoped to a scenario.
+
+5. **State-equivalence verification needs a deterministic hash.** Phase 5 tests assert that restore yields the captured state. Row-count comparison isn't enough (right counts, wrong values). Resolution: `md5(string_agg(t::text, '|' ORDER BY t::text))` per table — a content hash invariant to insert order. Per NFR-016, this includes all columns (TEXT PKs in our schema). For schemas with auto-increment IDs, hash non-PK columns only.
 
 **Work items.**
 

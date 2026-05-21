@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 5 — Full reset surface.** See [planning/PLAN.md](planning/PLAN.md#phase-5--full-reset-surface).
+**Phase 6 — Fixture delivery: Playwright JSON and pytest module.** See [planning/PLAN.md](planning/PLAN.md#phase-6--fixture-delivery-playwright-json-and-pytest-module).
 
 ## Open MVP work (Phases 1–10)
 

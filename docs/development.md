@@ -259,6 +259,45 @@ curl -fsS -X POST "http://localhost:18001/test-data/runs/$RUN/reset" \
 | `out_of_network_pending_claim` | Active member, out-of-network provider, claim pending review. |
 | `inactive_member_with_history` | Inactive member with historical paid claim (soft-delete semantics). |
 
+### Reset strategies (Phase 5)
+
+Five strategies, each demoable from the ATDM agent's HTTP API.
+
+| Strategy | Endpoint | When to use |
+|---|---|---|
+| `reset_run` | `POST /test-data/runs/{run_id}/reset` | Per-scenario cleanup. Token-gated. Atomic FK-safe delete of just one run's records. |
+| `reset_all` | `POST /test-data/reset/all` | Wipe every test_run_id-tagged row. Requires `X-Confirm: yes` header. Baseline reference rows preserved. |
+| `baseline_snapshot` | `POST /test-data/baseline/snapshot` | Capture the current state of every mutable + reference table to Parquet in MinIO. Body optionally names the baseline. |
+| `baseline_restore` | `POST /test-data/baseline/restore` | TRUNCATE everything and replay a named baseline (or the latest). Idempotent — re-running yields the same state. |
+| `idempotent_seed` | — | Property of `baseline_restore`, not an endpoint. |
+
+```bash
+# Snapshot the current state
+curl -fsS -X POST http://localhost:18001/test-data/baseline/snapshot \
+  -H 'authorization: Bearer dev-token-change-me' \
+  -H 'content-type: application/json' \
+  -d '{"baseline_id":"golden-2026-05-20"}'
+
+# List baselines
+curl -fsS http://localhost:18001/test-data/baseline/list | jq .
+
+# Restore (latest if baseline_id omitted)
+curl -fsS -X POST http://localhost:18001/test-data/baseline/restore \
+  -H 'authorization: Bearer dev-token-change-me' \
+  -H 'content-type: application/json' \
+  -d '{"baseline_id":"golden-2026-05-20"}'
+
+# Nuke every test run (preserves reference data)
+curl -fsS -X POST http://localhost:18001/test-data/reset/all \
+  -H 'authorization: Bearer dev-token-change-me' \
+  -H 'X-Confirm: yes'
+```
+
+Each strategy invocation emits its own audit trail under a synthetic
+`strategy-{name}-{ULID}` run_id, with `*_started`, `*_completed`, and
+on failure `*_failed` events. Look it up via
+`GET /audit/runs/strategy-...`.
+
 ### Validators (Phase 4)
 
 | Name | Rule |

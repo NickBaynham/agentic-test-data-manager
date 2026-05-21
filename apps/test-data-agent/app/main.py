@@ -16,6 +16,7 @@ from fastapi.responses import PlainTextResponse
 from app.api import audit as audit_routes
 from app.api import requests as request_routes
 from app.api import reset as reset_routes
+from app.api import strategies as strategy_routes
 from app.api.middleware import api_token_middleware
 from app.scenarios.registry import load_scenarios
 
@@ -39,6 +40,7 @@ app.middleware("http")(api_token_middleware)
 
 app.include_router(request_routes.router)
 app.include_router(reset_routes.router)
+app.include_router(strategy_routes.router)
 app.include_router(audit_routes.router)
 
 

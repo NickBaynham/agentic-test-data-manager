@@ -14,6 +14,15 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 5 — Full reset strategy surface (2026-05-20)
+
+- All five reset strategies demoable from the agent's HTTP API: `reset_run`, `reset_all`, `baseline_snapshot`, `baseline_restore`, and `idempotent_seed` (property of restore).
+- Server-side snapshot/restore via PyArrow + MinIO Parquet objects, schema-agnostic.
+- `reset_all` gated by `X-Confirm: yes` header to prevent demo accidents.
+- Idempotent restore (NFR-016): second invocation yields identical state.
+- Strategy invocations get their own audit trail under synthetic `strategy-{name}-{ULID}` run IDs.
+- 8 new integration tests covering C2 / C3 / C4 acceptance + X-Confirm gate.
+
 ### Phase 4 — Broadened generators, validators, and scenarios (2026-05-20)
 
 - Five entities live on the Target SUT (Provider, Eligibility, Claim, ProcedureCode, DiagnosisCode) with Pydantic models, transaction-aware repos, and atomic bundle endpoints.
@@ -58,7 +67,6 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 5.** All five reset strategies (`reset_run`, `reset_all`, `baseline_snapshot`, `baseline_restore`, `idempotent_seed`).
 - **Phase 6.** Playwright JSON + pytest module fixture emitters.
 - **Phase 7.** `atdm` CLI and `atdm.pytest` library.
 - **Phase 8.** Audit HTML page + AR-003 architecture fitness test in CI.

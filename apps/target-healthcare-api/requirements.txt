@@ -1,6 +1,9 @@
-# Container-side runtime deps for the Target Healthcare API (FastAPI stub).
+# Container-side runtime deps for the Target Healthcare API (FastAPI).
 # Keep in lockstep with the project root pyproject.toml dev deps so host-side
 # unit tests and container-side runtime match.
 fastapi>=0.115,<0.120
 uvicorn[standard]>=0.32,<0.40
 asyncpg>=0.30,<0.32
+# Phase 5: baseline snapshot/restore writes/reads Parquet to/from MinIO.
+pyarrow>=18,<21
+minio>=7.2

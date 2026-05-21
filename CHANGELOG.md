@@ -4,6 +4,36 @@ All notable changes to this project are recorded here. Newest first.
 
 ## [Unreleased]
 
+### Added — 2026-05-20 — Phase 5 full reset strategy surface
+
+All five reset strategies live and demoable from the agent's HTTP API. The
+SUT does the data work (it owns the schema and the rows); the agent
+orchestrates and writes audit events.
+
+- **Target SUT — server-side reset machinery**:
+  - `POST /internal/reset/all-tagged` — single Postgres transaction that DELETEs `WHERE test_run_id IS NOT NULL` from every mutable + reference table. Baseline reference rows (NULL) preserved.
+  - `POST /internal/baseline/snapshot?baseline_id=...` — writes each of the 7 tables to Parquet at `s3://atdm-catalog/baselines/{baseline_id}/<table>.parquet` plus a self-describing `manifest.json` (table list, row counts, captured_at, schema_version).
+  - `POST /internal/baseline/restore?baseline_id=...` — `TRUNCATE ... CASCADE` then re-insert from Parquet in FK order. Server-side transaction guarantees atomicity. Idempotent (NFR-016).
+  - `GET /internal/baseline/list` — every known baseline, newest first.
+- **ATDM agent — strategy endpoints**:
+  - `POST /test-data/reset/all` — requires `X-Confirm: yes` header (428 without). Wraps SUT reset-all-tagged + audit trail.
+  - `POST /test-data/baseline/snapshot` — generates a baseline_id if not supplied; emits `snapshot_started`/`snapshot_completed` audit events.
+  - `POST /test-data/baseline/restore` — accepts optional baseline_id; defaults to latest. Emits `restore_started`/`restore_completed`.
+  - `GET /test-data/baseline/list` — read-only, no auth.
+- **`idempotent_seed`** is the property that re-invoking `baseline_restore` twice in a row yields identical state. Verified by integration test, not a separate endpoint.
+- **`apps/target-healthcare-api/app/reset/`** module: `strategies.py` declares FK insert order and the mutable/reference table lists; `snapshotter.py` implements snapshot/restore as schema-agnostic Parquet round-trip (no hard-coded column lists — works for any column added in Phase 6+).
+- **Schema-agnostic Parquet round-trip**: snapshot dumps `SELECT *` per table; restore inserts back via dynamic parameterized SQL constructed from the Parquet column names. Generic SQL is acceptable inside the SUT (AR-003 forbids it in the agent only).
+- **Synthetic audit run IDs** for strategy invocations: `strategy-{name}-{ULID}` so they have their own audit trail visible via `GET /audit/runs/{audit_run_id}`.
+- Deps: `pyarrow` and `minio` added to Target SUT runtime (already in agent).
+- **8 new integration tests** in `tests/integration/test_phase5_resets.py`:
+  - X-Confirm gate (without / wrong value → 428)
+  - C3: `reset_all` clears tagged-only, preserves baseline reference rows
+  - C2: snapshot → pollute → restore yields exact captured state (deterministic SHA-256 row hash)
+  - C4: `baseline_restore` is idempotent — twice yields identical state
+  - Unknown baseline_id → 404
+  - `baseline_list` returns array
+  - `reset_all` emits `reset_started` + `reset_completed` audit events
+
 ### Added — 2026-05-20 — Phase 4 broadened generators, validators, and scenarios
 
 Phase 4 widens the Phase 3 vertical slice from one scenario to five, fills in
