@@ -622,6 +622,8 @@ ls docs/ docs/assets/
 ## Phase 10 — Hardening, polish, and merge-to-`main`
 
 > **STATUS: COMPLETE — 2026-05-21.** All Docker images pinned by digest. `make setup` now auto-installs Node + asciinema + agg via brew on macOS (errors out cleanly on missing required tools). Pre-commit hooks installed and verified — they catch ruff lint, format, architecture fitness, and no-emoji violations at commit time. Asciinema demo cast (`docs/assets/demo.cast`) and exported GIF (`docs/assets/demo.gif`) captured; the GIF is embedded in the README so reviewers see the demo in motion. **Project-wide DoD: all 16 items ticked.** MVP is done.
+>
+> **Caveat — not done in Phase 10:** the "fresh-clone reviewer dry-run on a separate machine" work item was skipped. All timings reported in this PLAN are from the dev host where caches were warm. A true cold-host measurement is tracked in [TODO.md "Outstanding from MVP phases"](../TODO.md) and would close the only gap between "MVP done on the dev box" and "MVP reproducible anywhere."
 
 **Goal.** CI is green, coverage is ≥ 80 % on the core modules, the demo is reproducible on a clean machine, and the project is presentable.
 
