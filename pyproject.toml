@@ -20,6 +20,10 @@ build-backend = "pdm.backend"
 [tool.pdm]
 distribution = false
 
+[tool.pdm.dev-dependencies]
+dev = [
+    "-e file:////Users/nbaynham/projects/agentic-test-data-manager/apps/test-data-agent/python#egg=atdm-client",
+]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -101,4 +105,5 @@ dev = [
     "minio>=7.2",
     "pyyaml>=6.0",
     "types-PyYAML>=6.0.12.20260518",
+    "typer<1,>=0.12",
 ]

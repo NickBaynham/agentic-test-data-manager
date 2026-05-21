@@ -1,0 +1,36 @@
+[project]
+name = "atdm-client"
+version = "0.1.0"
+description = "Client library and CLI for the Agentic Test Data Manager."
+authors = [
+    { name = "Nick Baynham", email = "nickbaynham@gmail.com" },
+]
+license = { text = "MIT" }
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.27",
+    "typer>=0.12,<1",
+]
+
+[project.optional-dependencies]
+pytest = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+atdm = "atdm.cli:main"
+
+# Auto-discover the pytest plugin so `import atdm.pytest` is enough — users
+# don't need to add it to conftest.py.
+[project.entry-points.pytest11]
+atdm = "atdm.pytest"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["atdm"]
+# Include the PEP 561 marker so downstream mypy sees atdm's type hints.
+[tool.hatch.build.targets.wheel.force-include]
+"atdm/py.typed" = "atdm/py.typed"

@@ -14,6 +14,17 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 - Directory skeleton for both apps, automation, infra, data, docs.
 - MIT license.
 
+### Phase 7 — `atdm` CLI and `atdm.pytest` library (2026-05-20)
+
+- Installable `atdm-client` package with PEP 561 `py.typed` marker.
+- `atdm` console script with 8 subcommands and `--output (human|json)` flag.
+- `@atdm_scenario(...)` decorator + `atdm_data` fixture; auto-loads via pytest11 entry point.
+- `AtdmClient` sync HTTP wrapper for direct Python use.
+- New agent endpoint `GET /catalog/scenarios` (FR-041).
+- Example pytest + Playwright tests under `automation/`.
+- `make playwright-install` / `make playwright-test` targets.
+- 16 atdm-client unit tests + 5 Phase 7 integration tests.
+
 ### Phase 6 — Fixture delivery (2026-05-20)
 
 - `POST /test-data/requests` writes a Playwright JSON fixture and/or an importable pytest Python module to `ATDM_FIXTURE_DIR/<scenario>_<run_id>.{json,py}` when the delivery flags are set.
@@ -74,7 +85,6 @@ Tracks the features that ship in the Agentic Test Data Manager (ATDM) MVP. A fea
 
 See [planning/PLAN.md](planning/PLAN.md) for the full phase breakdown. Summary:
 
-- **Phase 7.** `atdm` CLI and `atdm.pytest` library.
 - **Phase 8.** Audit HTML page + AR-003 architecture fitness test in CI.
 - **Phase 9.** `make demo`, README final, design-decisions doc.
 - **Phase 10.** Hardening, asciinema cast, project-wide Definition of Done complete.

@@ -460,7 +460,19 @@ ls -la ./automation/fixtures/
 
 ## Phase 7 — `atdm` CLI and `atdm.pytest` library
 
-**Goal.** The `atdm` CLI wraps every HTTP endpoint with predictable subcommands; the `atdm.pytest` library exposes the `@atdm_scenario` decorator that requests data and tears it down automatically.
+> **STATUS: COMPLETE — 2026-05-20.** `atdm` console script installs via editable package and is on the PATH after `pdm install`. All 8 subcommands exit 0 on happy path and propagate API errors as non-zero exits with structured stderr. `@atdm_scenario("...")` decorator + `atdm_data` fixture auto-load via pytest11 entry point and successfully seed + reset against the live stack (D3 verified at both unit and integration layers). **125 tests passing total (73 unit + 52 integration).**
+
+**Known pitfalls (discovered in Phase 7):**
+
+1. **Typer chokes on `Any` in command signatures.** Initial CLI wrapped each command in an `@_handle` error decorator that exposed `*args: Any, **kwargs: Any` to Typer's parameter introspection. Typer rejected the whole CLI. Resolution: inline the error handling per command instead of wrapping. **General rule**: when working with Typer/Click, wrapped functions must preserve the exact signature, or the wrapper has to be a no-op for parameter introspection.
+
+2. **Typer global options must precede the subcommand.** `atdm request scenario -o json` fails with "No such option `-o`" because `--output` is on the root callback. Correct: `atdm -o json request scenario`. Worth documenting in user-facing examples.
+
+3. **The duplicate-package mypy trap extended again — `tests/` this time.** Phase 7's `apps/test-data-agent/python/tests/` collides with `apps/test-data-agent/tests/`. Resolution mirrors the original `app` trap: add a fourth mypy invocation in the Makefile, explicit per-source-root. **General rule** (locked in by three repeated occurrences now): every new package root under `apps/<name>/` needs its own mypy invocation. Don't try to make one invocation cover multiple namespace-colliding subtrees.
+
+4. **`pytest.request.addfinalizer` runs BEFORE yield-fixture teardowns.** Tried to verify "the decorator's teardown emits reset_completed" by adding a finalizer to a marker-decorated test. The finalizer ran first (LIFO inside the test scope), then the `atdm_data` fixture's teardown — so the audit trail was inspected pre-reset. Resolution: cover the property in unit tests with `pytester` + a mock client, not at the integration layer. **General rule**: cross-fixture verification needs a session-scoped tracker, not a test-scoped finalizer.
+
+5. **PEP 561 `py.typed` must be force-included in the wheel.** Without it, downstream mypy treats every `atdm.*` import as untyped and refuses to type-check decorators. Hatchling needs `[tool.hatch.build.targets.wheel.force-include] "atdm/py.typed" = "atdm/py.typed"` (the marker file itself plus the build config).
 
 **Inputs.** Phase 6 complete.
 

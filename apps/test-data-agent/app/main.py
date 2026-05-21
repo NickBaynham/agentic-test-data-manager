@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
 from app.api import audit as audit_routes
+from app.api import catalog as catalog_routes
 from app.api import requests as request_routes
 from app.api import reset as reset_routes
 from app.api import strategies as strategy_routes
@@ -42,6 +43,7 @@ app.include_router(request_routes.router)
 app.include_router(reset_routes.router)
 app.include_router(strategy_routes.router)
 app.include_router(audit_routes.router)
+app.include_router(catalog_routes.router)
 
 
 @app.get("/health")

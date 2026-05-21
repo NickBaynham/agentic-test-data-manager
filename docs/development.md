@@ -259,6 +259,80 @@ curl -fsS -X POST "http://localhost:18001/test-data/runs/$RUN/reset" \
 | `out_of_network_pending_claim` | Active member, out-of-network provider, claim pending review. |
 | `inactive_member_with_history` | Inactive member with historical paid claim (soft-delete semantics). |
 
+### CLI and pytest plugin (Phase 7)
+
+The `atdm` CLI is installed automatically via the editable `atdm-client`
+package. The `atdm.pytest` plugin auto-loads via the pytest11 entry point.
+
+```bash
+# List loaded scenarios
+atdm scenarios
+
+# Request a scenario (constraints repeatable)
+atdm request claim_denial_active_member \
+  -c provider_network=out_of_network -c claim_status=denied
+
+# Look up the audit trail by run_id
+atdm audit 01KS3J3H4D4AFCQD98SEPJCPBP
+
+# Reset a specific run
+atdm reset 01KS3J3H4D4AFCQD98SEPJCPBP --token <cleanup_token>
+
+# Baseline snapshot / restore / list
+atdm baseline-snapshot --baseline-id golden-2026-05-20
+atdm baseline-restore --baseline-id golden-2026-05-20
+atdm baseline-list
+
+# Destructive — clear every test_run_id-tagged row across all tables
+atdm reset-all --confirm
+
+# All commands take a global --output/-o (human | json)
+atdm -o json scenarios | jq '.scenarios[].scenario_id'
+```
+
+The CLI reads `ATDM_API_URL` and `ATDM_API_TOKEN` from the environment.
+
+### Using `@atdm_scenario` in pytest
+
+```python
+from atdm.pytest import atdm_scenario
+
+@atdm_scenario("active_member_clean")
+def test_member(atdm_data):
+    # Data is seeded BEFORE this runs.
+    assert atdm_data["data"]["member_id"].startswith("m-")
+    # No cleanup needed — the fixture's teardown calls /reset for you.
+
+@atdm_scenario("claim_denial_active_member", constraints={"provider_network": "out_of_network"})
+def test_denied_claim(atdm_data):
+    assert atdm_data["data"]["claim_id"].startswith("claim-")
+```
+
+Or use `AtdmClient` directly:
+
+```python
+from atdm.client import AtdmClient
+
+client = AtdmClient()
+response = client.request_scenario("active_member_clean")
+try:
+    ...
+finally:
+    client.reset_run(response["test_run_id"], response["cleanup"]["cleanup_token"])
+```
+
+### Example Playwright test
+
+```bash
+# One-time
+make playwright-install
+
+# Generate a fixture, then run Playwright against it
+atdm request active_member_clean --playwright
+# (note the file path in the response; assume active_member_clean_<RUN>.json)
+FIXTURE_PATH=automation/fixtures/active_member_clean_<RUN>.json make playwright-test
+```
+
 ### Fixture delivery (Phase 6)
 
 A scenario request can optionally emit a Playwright JSON fixture and/or a

@@ -4,7 +4,7 @@ Tracks work not yet shipped. Items move to [FEATURES.md](FEATURES.md) when they 
 
 ## Next phase to start
 
-**Phase 7 — `atdm` CLI and `atdm.pytest` library.** See [planning/PLAN.md](planning/PLAN.md#phase-7--atdm-cli-and-atdmpytest-library).
+**Phase 8 — Audit HTML page and architecture fitness test.** See [planning/PLAN.md](planning/PLAN.md#phase-8--audit-html-page-and-architecture-fitness-test).
 
 ## Open MVP work (Phases 1–10)
 

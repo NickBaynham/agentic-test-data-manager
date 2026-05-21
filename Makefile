@@ -7,7 +7,7 @@
 PDM ?= pdm
 COMPOSE ?= docker compose -f infra/docker-compose.yml
 
-.PHONY: help setup lint test test-unit test-integration build up down down-clean logs ps migrate demo smoke baseline-snapshot reset-baseline clean
+.PHONY: help setup lint test test-unit test-integration build up down down-clean logs ps migrate demo smoke baseline-snapshot reset-baseline clean playwright-install playwright-test
 
 help:
 	@echo "Agentic Test Data Manager — Make targets"
@@ -39,8 +39,10 @@ lint:
 	$(PDM) run ruff check .
 	@echo "[lint] ruff format --check"
 	$(PDM) run ruff format --check .
-	@echo "[lint] mypy --strict (test-data-agent)"
-	$(PDM) run mypy --config-file mypy.ini apps/test-data-agent
+	@echo "[lint] mypy --strict (test-data-agent app+tests)"
+	$(PDM) run mypy --config-file mypy.ini apps/test-data-agent/app apps/test-data-agent/tests
+	@echo "[lint] mypy --strict (atdm-client package)"
+	$(PDM) run mypy --config-file mypy.ini apps/test-data-agent/python
 	@echo "[lint] mypy --strict (target-healthcare-api)"
 	$(PDM) run mypy --config-file mypy.ini apps/target-healthcare-api
 	@echo "[lint] mypy --strict (tests)"
@@ -55,6 +57,8 @@ test-unit:
 	PYTHONPATH=apps/target-healthcare-api $(PDM) run pytest apps/target-healthcare-api/tests
 	@echo "[test-unit] test-data-agent"
 	PYTHONPATH=apps/test-data-agent $(PDM) run pytest apps/test-data-agent/tests
+	@echo "[test-unit] atdm-client"
+	PYTHONPATH=apps/test-data-agent/python $(PDM) run pytest apps/test-data-agent/python/tests
 
 test-integration:
 	@echo "[test-integration] stack integration / e2e tests (requires Docker, brings up stack)"
@@ -109,3 +113,12 @@ clean:
 	@echo "[clean] removing caches and coverage artifacts"
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov dist build
 	find . -type d -name __pycache__ -not -path './.venv/*' -not -path './__pypackages__/*' -exec rm -rf {} +
+
+playwright-install:
+	@echo "[playwright-install] one-time install of Node deps + Chromium"
+	cd automation/playwright && npm install && npx playwright install chromium
+
+playwright-test:
+	@echo "[playwright-test] run example Playwright spec (requires FIXTURE_PATH)"
+	@test -n "$$FIXTURE_PATH" || (echo "FIXTURE_PATH must point at a JSON fixture from 'atdm request ... --playwright'"; exit 2)
+	cd automation/playwright && npx playwright test
